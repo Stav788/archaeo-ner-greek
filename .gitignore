@@ -170,3 +170,5 @@ requirements.txt*
 tests/resources/out
 ! notebooks/create_eval_dataset.ipynb
 models/
+backups/
+backup/
