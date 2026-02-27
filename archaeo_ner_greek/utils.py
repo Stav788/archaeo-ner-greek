@@ -1422,3 +1422,121 @@ def highlight_diff_entities_html(text: str, spans_a: list, spans_b: list, name_a
             html += f"<span style='background-color: {bg_color}; border: 1px dashed #ccc; padding: 2px 4px; border-radius: 4px;' title='{title}'>{chunk_text}{labels_html}</span>"
             
     return f"<div style='line-height: 2.5; font-family: sans-serif; font-size: 1.1em;'>{html}</div>"
+
+def render_interactive_adjudication_tool(iaa_ready: list, discrepancies_only: pd.DataFrame, annotator_a: str, annotator_b: str):
+    """
+    Renders the interactive widget UI for reviewing adjudication discrepancies.
+    Should be called at the end of a Jupyter Notebook cell.
+    """
+    import ipywidgets as widgets
+    from IPython.display import display, HTML
+    
+    # Filter iaa_ready to match the discrepancies-only index mapping
+    discrepancy_ids = set(discrepancies_only["sentence_id"])
+    iaa_discrepancies = [item for item in iaa_ready if item["sentence_id"] in discrepancy_ids]
+
+    if not iaa_discrepancies:
+        display(HTML("<p>No discrepancies found to review.</p>"))
+        return
+
+    # Create widgets
+    record_slider = widgets.IntSlider(
+        value=0, min=0, max=len(iaa_discrepancies)-1, 
+        description='Sentence:', 
+        layout=widgets.Layout(width='40%')
+    )
+
+    prev_button = widgets.Button(description='Previous', icon='chevron-left')
+    next_button = widgets.Button(description='Next', icon='chevron-right')
+
+    annotator_toggle = widgets.Dropdown(
+        options=[
+            (annotator_a, annotator_a), 
+            (annotator_b, annotator_b), 
+            ('Compare (Stacked)', 'compare'), 
+            ('Diff (Merge)', 'diff')
+        ],
+        value='diff',
+        description='View:',
+    )
+
+    # Use HTML widget for stability - clears previous content automatically on .value update
+    html_viewer = widgets.HTML()
+
+    def update_view(change):
+        if len(iaa_discrepancies) == 0: 
+            html_viewer.value = "No discrepancies found."
+            return
+            
+        idx = record_slider.value
+        user = annotator_toggle.value
+        item = iaa_discrepancies[idx]
+        
+        text = item["text"]
+        
+        # Get discrepancy info from our report DF
+        report_row = discrepancies_only[discrepancies_only["sentence_id"] == item["sentence_id"]].iloc[0]
+        
+        html_out = f"<h3>Sentence ID: {item['sentence_id']} ({idx + 1} / {len(iaa_discrepancies)})</h3>"
+        
+        if user == 'compare':
+            spans_a = item["annotations"].get(annotator_a, [])
+            spans_b = item["annotations"].get(annotator_b, [])
+            
+            html_out += f"<div style='border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;'>"
+            html_out += f"<h4 style='margin-top: 0;'>{annotator_a}</h4>"
+            if annotator_a not in item["annotations"]:
+                html_out += f"<p style='color: red;'><b>Warning:</b> User '{annotator_a}' not found.</p>"
+            html_out += highlight_entities_html(text, spans_a)
+            html_out += "</div>"
+            
+            html_out += f"<div style='border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;'>"
+            html_out += f"<h4 style='margin-top: 0;'>{annotator_b}</h4>"
+            if annotator_b not in item["annotations"]:
+                html_out += f"<p style='color: red;'><b>Warning:</b> User '{annotator_b}' not found.</p>"
+            html_out += highlight_entities_html(text, spans_b)
+            html_out += "</div>"
+            
+        elif user == 'diff':
+            spans_a = item["annotations"].get(annotator_a, [])
+            spans_b = item["annotations"].get(annotator_b, [])
+            html_out += f"<div style='border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;'>"
+            html_out += f"<h4 style='margin-top: 0;'>Combined Diff (Showing Differences Only)</h4>"
+            html_out += highlight_diff_entities_html(text, spans_a, spans_b, annotator_a, annotator_b)
+            html_out += "</div>"
+            
+        else:
+            spans = item["annotations"].get(user, [])
+            html_out += f"<p><b>Showing annotations for:</b> {user}</p>"
+            
+            if user not in item["annotations"]:
+                html_out += f"<p style='color: red;'><b>Warning:</b> User '{user}' not found in record. Available keys: {list(item['annotations'].keys())}</p>"
+            
+            html_out += highlight_entities_html(text, spans)
+            
+        html_out += "<hr>"
+        html_out += "<h4>Discrepancy Details (Ref):</h4>"
+        html_out += f"<pre style='background: #f8f9fa; padding: 10px; border: 1px solid #ddd;'>{report_row['discrepancies']}</pre>"
+        
+        # Simple assignment ensures NO duplication
+        html_viewer.value = html_out
+
+    def on_prev_clicked(b):
+        if record_slider.value > 0:
+            record_slider.value -= 1
+
+    def on_next_clicked(b):
+        if record_slider.value < record_slider.max:
+            record_slider.value += 1
+
+    record_slider.observe(update_view, names='value')
+    annotator_toggle.observe(update_view, names='value')
+    prev_button.on_click(on_prev_clicked)
+    next_button.on_click(on_next_clicked)
+
+    # Initial display
+    nav_box = widgets.HBox([prev_button, record_slider, next_button])
+    ui = widgets.VBox([nav_box, annotator_toggle])
+    display(ui)
+    display(html_viewer)
+    update_view(None)
