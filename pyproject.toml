@@ -55,6 +55,7 @@ dependencies = [
     "gliner2>=1.0.2",
     "mammoth>=1.11.0",
     "markdownify>=1.2.2",
+    "nbformat>=5.10.4",
 ]
 
 # Tell uv to also look at the pytorch index

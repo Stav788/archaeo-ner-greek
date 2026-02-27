@@ -1216,3 +1216,209 @@ def analyze_iaa_discrepancies(iaa_ready: List[Dict[str, Any]], annotators: List[
         df_stats = pd.concat([df_stats, avg_row])
 
     return df_stats
+
+def generate_adjudication_report_df(iaa_ready: List[Dict[str, Any]], annotators: List[str] = None) -> pd.DataFrame:
+    """
+    Generates a detailed DataFrame for adjudication, highlighting discrepancies between two annotators.
+    """
+    if annotators is None or len(annotators) < 2:
+        # Fallback to first two annotators found in the first record that has >=2
+        for item in iaa_ready:
+            if len(item["annotations"]) >= 2:
+                annotators = list(item["annotations"].keys())[:2]
+                break
+    
+    if not annotators: return pd.DataFrame()
+    u1, u2 = annotators[0], annotators[1]
+    
+    report_rows = []
+    
+    for item in iaa_ready:
+        text = item["text"]
+        annos = item["annotations"]
+        if u1 not in annos or u2 not in annos: continue
+        
+        spans1 = sorted(annos[u1], key=lambda x: x[0])
+        spans2 = sorted(annos[u2], key=lambda x: x[0])
+        
+        # Helper to format spans for display
+        def format_spans(spans, text_content):
+            lines = []
+            for s in spans:
+                start, end, label = s
+                # Safely slice text
+                snippet = text_content[start:end] if (0 <= start < end <= len(text_content)) else "???"
+                lines.append(f"{snippet} [{label}] ({start}:{end})")
+            return "\n".join(lines)
+        
+        disp1 = format_spans(spans1, text)
+        disp2 = format_spans(spans2, text)
+        
+        # Identify discrepancies
+        set1 = set(spans1)
+        set2 = set(spans2)
+        
+        discreps = []
+        status = "Match"
+        
+        if set1 != set2:
+            matched_indices_in_2 = set()
+            
+            for s1 in spans1:
+                start1, end1, label1 = s1
+                found_overlap = False
+                snippet1 = text[start1:end1] if (0 <= start1 < end1 <= len(text)) else "???"
+                
+                for i, s2 in enumerate(spans2):
+                    start2, end2, label2 = s2
+                    overlap = max(0, min(end1, end2) - max(start1, start2))
+                    
+                    if overlap > 0:
+                        found_overlap = True
+                        matched_indices_in_2.add(i)
+                        
+                        if start1 == start2 and end1 == end2:
+                            if label1 != label2:
+                                discreps.append(f"Label mismatch for '{snippet1}': {label1} ({u1}) vs {label2} ({u2})")
+                                if status == "Match": status = "Label Mismatch"
+                                elif status != "Label Mismatch": status = "Multiple Issues"
+                        else:
+                            snippet2 = text[start2:end2] if (0 <= start2 < end2 <= len(text)) else "???"
+                            discreps.append(f"Boundary mismatch: '{snippet1}' ({u1}) vs '{snippet2}' ({u2})")
+                            if status == "Match": status = "Boundary Mismatch"
+                            elif status != "Boundary Mismatch": status = "Multiple Issues"
+                        break # Found the primary overlap
+                
+                if not found_overlap:
+                    discreps.append(f"Missed by {u2}: '{snippet1}' [{label1}] at {start1}:{end1}")
+                    if status == "Match": status = f"Miss by {u2}"
+                    elif status != f"Miss by {u2}": status = "Multiple Issues"
+            
+            for i, s2 in enumerate(spans2):
+                if i not in matched_indices_in_2:
+                    start2, end2, label2 = s2
+                    snippet2 = text[start2:end2] if (0 <= start2 < end2 <= len(text)) else "???"
+                    discreps.append(f"Missed by {u1}: '{snippet2}' [{label2}] at {start2}:{end2}")
+                    if status == "Match": status = f"Miss by {u1}"
+                    elif status not in [f"Miss by {u1}", "Multiple Issues"]: status = "Multiple Issues"
+
+        report_rows.append({
+            "sentence_id": item["sentence_id"],
+            "text": text,
+            f"{u1}_annotations": disp1 if disp1 else "(None)",
+            f"{u2}_annotations": disp2 if disp2 else "(None)",
+            "discrepancies": "\n".join(discreps) if discreps else "None",
+            "status": status
+        })
+        
+    return pd.DataFrame(report_rows)
+
+def highlight_entities_html(text: str, spans: List[tuple], color_map: Dict[str, str] = None) -> str:
+    """
+    Returns an HTML string with entities highlighted.
+    spans: List of (start, end, label)
+    """
+    if not color_map:
+        color_map = {
+            'ARTEFACT': '#e8f4f8', 'PERIOD': '#fff3cd', 'LOCATION': '#d4edda',
+            'CONTEXT': '#d1ecf1', 'CONTEXT_ID': '#f8d7da', 'MATERIAL': '#e2e3e5',
+            'SPECIES': '#f3e5f5', 'FEATURE': '#fff9c4', 'PERSON': '#c8e6c9', 'MISC': '#eeeeee'
+        }
+    
+    # Sort spans by start, handle overlaps (simple strategy: take first)
+    sorted_spans = sorted(spans, key=lambda x: x[0])
+    
+    html = ""
+    last_idx = 0
+    
+    for start, end, label in sorted_spans:
+        if start < last_idx: continue # Skip overlapping for simple viz
+        
+        # Text before entity
+        html += text[last_idx:start]
+        
+        # Entity with background color and label
+        color = color_map.get(label, '#ffffff')
+        entity_text = text[start:end]
+        html += (
+            f'<span style="background-color: {color}; border-radius: 4px; padding: 2px 4px; margin: 0 2px; border: 1px solid #ccc;" '
+            f'title="{label}">'
+            f'{entity_text} <b style="font-size: 0.8em; opacity: 0.7;">({label})</b>'
+            f'</span>'
+        )
+        last_idx = end
+        
+    html += text[last_idx:]
+    return f'<div style="line-height: 2.0; font-family: sans-serif; font-size: 1.1em;">{html}</div>'
+
+def highlight_diff_entities_html(text: str, spans_a: list, spans_b: list, name_a: str = "A", name_b: str = "B") -> str:
+    """
+    Renders an HTML view where ONLY the differences between spans_a and spans_b are highlighted.
+    Perfect matches are ignored.
+    """
+    set_a = set(tuple(s) for s in spans_a if len(s)==3)
+    set_b = set(tuple(s) for s in spans_b if len(s)==3)
+    matches = set_a & set_b
+    
+    diff_a = set_a - matches
+    diff_b = set_b - matches
+    
+    char_states = [{'a': set(), 'b': set()} for _ in range(len(text))]
+    
+    for s, e, l in diff_a:
+        for i in range(s, e):
+            if 0 <= i < len(text):
+                char_states[i]['a'].add(l)
+                
+    for s, e, l in diff_b:
+        for i in range(s, e):
+            if 0 <= i < len(text):
+                char_states[i]['b'].add(l)
+                
+    chunks = []
+    current_state = None
+    current_start = 0
+    
+    for i in range(len(text)):
+        a_labels = tuple(sorted(char_states[i]['a']))
+        b_labels = tuple(sorted(char_states[i]['b']))
+        state = (a_labels, b_labels)
+        
+        if state != current_state:
+            if current_state is not None:
+                chunks.append((current_start, i, current_state))
+            current_state = state
+            current_start = i
+            
+    if current_state is not None:
+        chunks.append((current_start, len(text), current_state))
+        
+    html = ""
+    for start, end, state in chunks:
+        a_labels, b_labels = state
+        chunk_text = text[start:end]
+        
+        if not a_labels and not b_labels:
+            html += chunk_text
+        else:
+            bg_color = "#ffeeee" # default light red
+            if a_labels and not b_labels:
+                bg_color = "#e6f2ff" # light blue
+            elif b_labels and not a_labels:
+                bg_color = "#e6ffe6" # light green
+            elif a_labels and b_labels:
+                bg_color = "#fff0b3" # yellow for conflict
+                
+            title = ""
+            if a_labels: title += f"{name_a}: {', '.join(a_labels)} "
+            if b_labels: title += f"{name_b}: {', '.join(b_labels)}"
+            
+            labels_html = ""
+            if a_labels:
+                labels_html += f"<span style='color: #0055aa; font-weight: bold; font-size: 0.7em; vertical-align: super;'>[{name_a}: {','.join(a_labels)}]</span> "
+            if b_labels:
+                labels_html += f"<span style='color: #008800; font-weight: bold; font-size: 0.7em; vertical-align: sub;'>[{name_b}: {','.join(b_labels)}]</span> "
+                
+            html += f"<span style='background-color: {bg_color}; border: 1px dashed #ccc; padding: 2px 4px; border-radius: 4px;' title='{title}'>{chunk_text}{labels_html}</span>"
+            
+    return f"<div style='line-height: 2.5; font-family: sans-serif; font-size: 1.1em;'>{html}</div>"
