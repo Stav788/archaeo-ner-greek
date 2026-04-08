@@ -2,7 +2,7 @@ This project provides a Named Entity Recognition (NER) solution specifically des
 
 It will eventually include a FastAPI backend for model inference and a Streamlit frontend for user interaction.
 
-See [.agents/TODO.md](.agents/TODO.md) for current status and planned improvements.
+See [.agents/TODO.md](.agents/TODO.md) and [.agents/HANDOVER.md](.agents/HANDOVER.md) for current status, technical context, and planned improvements.
 
 ### Project Context
 - Goal: Named Entity Recognition (NER) for Greek archaeological documents based on annotated data created in the context of stalexan thesis.

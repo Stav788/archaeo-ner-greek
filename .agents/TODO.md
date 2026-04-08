@@ -2,11 +2,13 @@
 
 ### Status
 - Baseline NER infrastructure.
-- **Environment**: GPU-enabled `.venv` with **`gliner2`** installed and ready.
+- **Environment**: GPU-enabled `.venv` with **`gliner2`** (`+cu130`) successfully engaged on Blackwell (NVIDIA GB10).
+- **Training**: Active 20-epoch LoRA run with custom metrics logic.
 
 ### Next Steps
-- [ ] **GLiNER2 Model selection** Which GLiNER2 model to use? base, large, or multi?
-- [ ] **GLiNER2 Model Training** with only Greek labels.
-- [ ] **Evaluation** of the trained model.
-- [ ] **GLiNER2 Model Training** with only Greek labels and annotated data.
-- [ ] **Evaluation** of the trained model.
+- [x] **Baseline Capture**: Achieved F1 0.29 / Recall 0.60 @ threshold 0.1.
+- [ ] **Guideline Refinement**: Remove mythology from `SPECIES`; tighten `PERSON` vs `ARTEFACT`.
+- [ ] **Stability Run**: Execute `r=4`, `alpha=8.0`, `lr=1e-4` for 60 epochs.
+- [ ] **Automated Logging**: Hook `compute_metrics` into `TrainingConfig` for epoch-by-epoch tracking.
+- [ ] **State Debugging**: Identify and eliminate the race condition/cell sequence causing `guidelines_dict` to be periodically emptied.
+- [ ] **Integration**: Prepare FastAPI model server handler.

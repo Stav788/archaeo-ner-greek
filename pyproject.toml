@@ -6,10 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 dependencies = [
-    # Pin your torch libraries here
-    "torch==2.7.0",
-    "torchvision==0.22.0",
-    "torchaudio==2.7.0",
     "accelerate>=1.11.0",
     "argilla>=2.8.0",
     "bs4>=0.0.2",
@@ -56,12 +52,14 @@ dependencies = [
     "mammoth>=1.11.0",
     "markdownify>=1.2.2",
     "nbformat>=5.10.4",
+    "pyarrow>=23.0.1",
+    "datasets>=4.8.4",
 ]
 
 # Tell uv to also look at the pytorch index
 [tool.uv.pip]
 extra-index-url = [
-    "https://download.pytorch.org/whl/cu126"
+    "https://download.pytorch.org/whl/cu130"
 ]
 
 [tool.setuptools]

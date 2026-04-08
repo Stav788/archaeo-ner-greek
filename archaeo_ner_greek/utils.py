@@ -17,61 +17,61 @@ logger = logging.getLogger(__name__)
 
 # --- Templates ---
 
-css_template = """
-<div id="docs_content"></div>
-<script id="docs_template" type="text/x-handlebars-template">
-    <style>
-    #container {
-        display: flex;
-        gap: 10px;
-    }
-    .column {
-        flex: 1;
-    }
-    /* --- Added color rules --- */
-    .column:nth-child(1) h3 {
-        color: #4A90E2; /* Blue */
-    }
-    .column:nth-child(2) h3 {
-        color: #2ECC71; /* Green */
-    }
-    .column:nth-child(3) h3 {
-        color: #F39C12; /* Orange */
-    }
-    .column:nth-child(4) h3 {
-        color: #9B59B6; /* Purple */
-    }    
-    </style>
-    <div id="container">
-        <div class="column">
-            <h3>Source document</h3>
-            <div>{{{record.fields.docs.source_doc}}}</div>
-        </div>
-        <div class="column">
-            <h3>Ground truth</h3>
-            <div>{{{record.fields.docs.ground_truth_doc}}}</div>
-        </div>
-        <div class="column">
-            <h3>MT</h3>
-            <div>{{{record.fields.docs.mt_doc}}}</div>
-        </div>
-        <div class="column">
-            <h3>MT + Adaptation</h3>
-            <div>{{{record.fields.docs.mt_adapt_doc}}}</div>
-        </div>
-    </div>
-</script>    
-"""
+# css_template = """
+# <div id="docs_content"></div>
+# <script id="docs_template" type="text/x-handlebars-template">
+#     <style>
+#     #container {
+#         display: flex;
+#         gap: 10px;
+#     }
+#     .column {
+#         flex: 1;
+#     }
+#     /* --- Added color rules --- */
+#     .column:nth-child(1) h3 {
+#         color: #4A90E2; /* Blue */
+#     }
+#     .column:nth-child(2) h3 {
+#         color: #2ECC71; /* Green */
+#     }
+#     .column:nth-child(3) h3 {
+#         color: #F39C12; /* Orange */
+#     }
+#     .column:nth-child(4) h3 {
+#         color: #9B59B6; /* Purple */
+#     }    
+#     </style>
+#     <div id="container">
+#         <div class="column">
+#             <h3>Source document</h3>
+#             <div>{{{record.fields.docs.source_doc}}}</div>
+#         </div>
+#         <div class="column">
+#             <h3>Ground truth</h3>
+#             <div>{{{record.fields.docs.ground_truth_doc}}}</div>
+#         </div>
+#         <div class="column">
+#             <h3>MT</h3>
+#             <div>{{{record.fields.docs.mt_doc}}}</div>
+#         </div>
+#         <div class="column">
+#             <h3>MT + Adaptation</h3>
+#             <div>{{{record.fields.docs.mt_adapt_doc}}}</div>
+#         </div>
+#     </div>
+# </script>    
+# """
 
-script = """
-<script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
-<script>
-    const docs_template = document.getElementById("docs_template").innerHTML;
-    const compiledTemplate = Handlebars.compile(docs_template);
-    const html = compiledTemplate({ record });
-    document.getElementById("docs_content").innerHTML = html;
-</script>
-"""
+# script = """
+# <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
+# <script>
+#     const docs_template = document.getElementById("docs_template").innerHTML;
+#     const compiledTemplate = Handlebars.compile(docs_template);
+#     const html = compiledTemplate({ record });
+#     document.getElementById("docs_content").innerHTML = html;
+# </script>
+# """
 
 # --- Models ---
 
@@ -466,10 +466,11 @@ def get_dataset_as_dataframe(
     client: rg.Argilla, 
     dataset_name: Union[str, rg.Dataset], 
     workspace_name: Optional[str] = None,
-    include_responses: bool = False
+    include_responses: bool = False,
+    username: Optional[str] = None
 ) -> pd.DataFrame:
     """
-    Exports an Argilla dataset to a pandas DataFrame.
+    Exports an Argilla dataset to a pandas DataFrame with optional filtering by username.
 
     Args:
         client: Authenticated Argilla client.
@@ -477,6 +478,8 @@ def get_dataset_as_dataframe(
         workspace_name: Workspace name (required if dataset_name is a string and not unique).
         include_responses: If True, includes a column 'responses' with a list of dictionaries 
                            containing {'username': ..., 'values': ..., 'status': ...}.
+        username: Optional username to filter by. If provided, it automatically includes 
+                  responses and only returns records where this user has a response.
     """
     try:
         if isinstance(dataset_name, str):
@@ -488,6 +491,10 @@ def get_dataset_as_dataframe(
             logger.error(f"Dataset '{dataset_name}' not found.")
             return pd.DataFrame()
         
+        # Enable responses if username filtering is requested
+        if username:
+            include_responses = True
+            
         records = list(dataset.records)
         if not records:
             logger.warning(f"Dataset '{dataset.name}' is empty.")
@@ -508,18 +515,58 @@ def get_dataset_as_dataframe(
             row.update(r.metadata)
             
             if include_responses:
-                # Format: [{'username': 'prokopis', 'values': {...}, 'status': 'submitted'}, ...]
                 row["responses"] = []
-                for resp in r.responses:
-                    # logger.info(dir(resp))
-                    # In v2, response has user_id, not a user object
-                    u_id = str(resp.user_id) if resp.user_id else None
-                    row["responses"].append({
-                        "username": user_map.get(u_id, "unknown") if u_id else "unknown",
+                target_user_response = None
+                
+                # Use list() to handle Argilla's custom containers (SearchRecordsList, etc.)
+                try:
+                    responses_source = list(r.responses) if r.responses is not None else []
+                except Exception:
+                    responses_source = []
+                
+                # SERIALLIZED SOURCE: Get the dict exactly as shown in your logs
+                record_dict = r.to_dict()
+                agg_responses = record_dict.get("responses", {})
+                
+                # Use list() to handle the objects for user identification
+                try:
+                    resps_list = list(r.responses)
+                except Exception:
+                    resps_list = []
+                
+                for idx, resp in enumerate(resps_list):
+                    u_id = str(resp.user_id) if hasattr(resp, "user_id") else None
+                    u_name = user_map.get(u_id, "unknown") if u_id else "unknown"
+                    
+                    # Pull values from the serialized agg_responses dict
+                    user_values = {}
+                    for q_name, q_list in agg_responses.items():
+                        if isinstance(q_list, list) and idx < len(q_list):
+                            item = q_list[idx]
+                            user_values[q_name] = item.get("value") if isinstance(item, dict) else item
+                    
+                    resp_data = {
+                        "username": u_name,
                         "user_id": u_id,
-                        "values": resp.value,
-                        "status": resp.status
-                    })
+                        "values": user_values,
+                        "status": getattr(resp, "status", "unknown")
+                    }
+                    row["responses"].append(resp_data)
+                    
+                    if username and u_name == username:
+                        target_user_response = resp_data
+                
+                # Filter by username if specified
+                if username:
+                    if not target_user_response:
+                        continue
+                    
+                    row["response"] = target_user_response
+                    final_v = target_user_response.get("values", {})
+                    
+                    # entities is now guaranteed to be in target_user_response['values']
+                    labels = final_v.get("entities", [])
+                    row["labels"] = labels if isinstance(labels, list) else []
             
             data.append(row)
         return pd.DataFrame(data)
