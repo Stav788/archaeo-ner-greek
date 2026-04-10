@@ -15,8 +15,9 @@
 
 
 ## 3. Task Board
-- [ ] **Error Analysis**: Review 43 False Positives to identify semantic overlap.
-- [ ] **Validation**: Test on separate unseen archaeological documents.
+- [ ] **Data Expansion**: Annotate 21 additional samples as a **fixed "Gold" Test Set** (Held-out).
+- [ ] **Split Optimization**: Transition to a 191/21/21 (Train/Val/Test) fixed-count split to prevent validation leak.
+- [ ] **Final Benchmarking**: Report unbiased PRF metrics on the locked Gold Test Set.
 
 ## Qualitative Error Analysis Diagnostic
 
