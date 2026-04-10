@@ -54,13 +54,21 @@ dependencies = [
     "nbformat>=5.10.4",
     "pyarrow>=23.0.1",
     "datasets>=4.8.4",
+    "jupytext>=1.19.1",
+    "torch==2.11.0+cu130 ; sys_platform == 'linux'",
+    "torchvision==0.26.0+cu130 ; sys_platform == 'linux'",
+    "torchaudio==2.11.0+cu130 ; sys_platform == 'linux'",
 ]
 
-# Tell uv to also look at the pytorch index
-[tool.uv.pip]
-extra-index-url = [
-    "https://download.pytorch.org/whl/cu130"
-]
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
+torchaudio = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
 
 [tool.setuptools]
 packages = ["archaeo_ner_greek"]

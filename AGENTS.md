@@ -2,7 +2,7 @@ This project provides a Named Entity Recognition (NER) solution specifically des
 
 It will eventually include a FastAPI backend for model inference and a Streamlit frontend for user interaction.
 
-See [.agents/TODO.md](.agents/TODO.md) and [.agents/HANDOVER.md](.agents/HANDOVER.md) for current status, technical context, and planned improvements.
+See [.agents/STATUS.md](.agents/STATUS.md) for current status, technical context, and planned improvements.
 
 ### Project Context
 - Goal: Named Entity Recognition (NER) for Greek archaeological documents based on annotated data created in the context of stalexan thesis.
@@ -15,7 +15,12 @@ See [.agents/TODO.md](.agents/TODO.md) and [.agents/HANDOVER.md](.agents/HANDOVE
 
 
 ### Instructions for Agents
-- MANDATORY COMMUNICATION RULE: Professional, dry, and strictly abbreviated bullets only.
+- **MANDATORY ENVIRONMENT RULE: Use `uv run` or `.venv/bin/python` for execution.** 
+  - Activate the environment using `source .venv/bin/activate`.
+  - Do NOT use global `python`.
+  - Use `uv add` for dependencies; do NOT use `pip`. 
+  - The local package `archaeo_ner_greek` is installed as an editable package (`uv pip install -e .`).
+- **MANDATORY COMMUNICATION RULE**: Professional, dry, and strictly abbreviated bullets only.
   - NO emojis, NO filler ("wow", "awesome"), NO conversational phrasing.
   - This rule takes precedence over all other rules.
 - Safety & Transparency: No unannounced changes; present the "Why" and "How" before implementation and flag issues immediately.
