@@ -1,0 +1,10 @@
+{
+    "ARTEFACT": "any type of archaeological find,Regardless of size. Includes detached architectural members like «κιονόκρανο», «θριγκὸ» or objects like «διπλός πέλεκυς», «αναθηματική στήλη».",
+    "PERIOD": "dates, chronological periods, and abbreviations. Examples: «2ος αι. μ.Χ.», «ΠΕ ΙΙΙ», «ΥΕ ΙΙΙΒ/Γ».",
+    "LOCATION": "cities, villages, locations, countries, and specific places. Examples: «Ρόδος», «Θάσος», «Αρχαιολογικό Μουσείο Ιωαννίνων».",
+    "CONTEXT": "buildings and fixed anthropogenic constructions. Examples: «τάφοι», «βασιλική», «ναός», «τείχη».",
+    "MATERIAL": "materials from which a find or structure is made. Examples: «μάρμαρο», «χαλκός», «οστό».",
+    "SPECIES": "animal and plant species, including mythological creatures. Examples: «Αγελάδα», «γρύπας», «Spondylus gaederopus».",
+    "PERSON": "historical or mythological figures. Examples: «Σφίγγα».",
+    "FEATURE": "stylistic, typological, iconographic characteristics, and techniques. Examples: «ισοδομικό σύστημα», «ψηφιδωτό», «ερυθρόμορφο», «Ανάληψη του Αλεξάνδρου»."
+}
