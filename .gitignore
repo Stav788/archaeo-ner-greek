@@ -171,4 +171,4 @@ tests/resources/out
 ! notebooks/create_eval_dataset.ipynb
 models/
 backups/
-backup/
+backup/*-bak.ipynb
