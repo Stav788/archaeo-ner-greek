@@ -542,29 +542,31 @@ def get_dataset_as_dataframe(
                 except Exception:
                     resps_list = []
                 
+                user_responses_map = {}
                 for resp in resps_list:
                     u_id = str(resp.user_id) if hasattr(resp, "user_id") else None
-                    u_name = user_map.get(u_id, "unknown") if u_id else "unknown"
+                    if not u_id: continue
                     
-                    # Correctly match values to this user by checking user_id in the aggregated dict
-                    user_values = {}
+                    if u_id not in user_responses_map:
+                        user_responses_map[u_id] = {
+                            "username": user_map.get(u_id, "unknown"),
+                            "user_id": u_id,
+                            "values": {},
+                            "status": getattr(resp, "status", "unknown")
+                        }
+                    
+                    # Merge values from all questions for this specific user
                     for q_name, q_list in agg_responses.items():
                         if isinstance(q_list, list):
-                            # Find the item in this question's list that belongs to the current user
                             for item in q_list:
                                 if isinstance(item, dict) and str(item.get("user_id")) == u_id:
-                                    user_values[q_name] = item.get("value")
+                                    user_responses_map[u_id]["values"][q_name] = item.get("value")
                                     break
-                    
-                    resp_data = {
-                        "username": u_name,
-                        "user_id": u_id,
-                        "values": user_values,
-                        "status": getattr(resp, "status", "unknown")
-                    }
+                
+                # Finalize row responses and identify target user
+                for u_id, resp_data in user_responses_map.items():
                     row["responses"].append(resp_data)
-                    
-                    if username and u_name == username:
+                    if username and resp_data["username"] == username:
                         target_user_response = resp_data
                 
                 # Filter by username if specified
