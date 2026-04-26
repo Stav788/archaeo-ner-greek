@@ -17,61 +17,69 @@ logger = logging.getLogger(__name__)
 
 # --- Templates ---
 
-# css_template = """
-# <div id="docs_content"></div>
-# <script id="docs_template" type="text/x-handlebars-template">
-#     <style>
-#     #container {
-#         display: flex;
-#         gap: 10px;
-#     }
-#     .column {
-#         flex: 1;
-#     }
-#     /* --- Added color rules --- */
-#     .column:nth-child(1) h3 {
-#         color: #4A90E2; /* Blue */
-#     }
-#     .column:nth-child(2) h3 {
-#         color: #2ECC71; /* Green */
-#     }
-#     .column:nth-child(3) h3 {
-#         color: #F39C12; /* Orange */
-#     }
-#     .column:nth-child(4) h3 {
-#         color: #9B59B6; /* Purple */
-#     }    
-#     </style>
-#     <div id="container">
-#         <div class="column">
-#             <h3>Source document</h3>
-#             <div>{{{record.fields.docs.source_doc}}}</div>
-#         </div>
-#         <div class="column">
-#             <h3>Ground truth</h3>
-#             <div>{{{record.fields.docs.ground_truth_doc}}}</div>
-#         </div>
-#         <div class="column">
-#             <h3>MT</h3>
-#             <div>{{{record.fields.docs.mt_doc}}}</div>
-#         </div>
-#         <div class="column">
-#             <h3>MT + Adaptation</h3>
-#             <div>{{{record.fields.docs.mt_adapt_doc}}}</div>
-#         </div>
-#     </div>
-# </script>    
-# """
+css_template = """
+<div id="docs_content"></div>
+<script id="docs_template" type="text/x-handlebars-template">
+    <style>
+    #container {
+        display: flex;
+        gap: 10px;
+    }
+    .column {
+        flex: 1;
+    }
+    /* --- Added color rules --- */
+    .column:nth-child(1) h3 {
+        color: #4A90E2; /* Blue */
+    }
+    .column:nth-child(2) h3 {
+        color: #2ECC71; /* Green */
+    }
+    .column:nth-child(3) h3 {
+        color: #F39C12; /* Orange */
+    }
+    .column:nth-child(4) h3 {
+        color: #9B59B6; /* Purple */
+    }    
+    </style>
+    <div id="container">
+        <div class="column">
+            <h3>Source document</h3>
+            <div>{{{record.fields.docs.source_doc}}}</div>
+        </div>
+        <div class="column">
+            <h3>Ground truth</h3>
+            <div>{{{record.fields.docs.ground_truth_doc}}}</div>
+        </div>
+        <div class="column">
+            <h3>MT</h3>
+            <div>{{{record.fields.docs.mt_doc}}}</div>
+        </div>
+        <div class="column">
+            <h3>MT + Adaptation</h3>
+            <div>{{{record.fields.docs.mt_adapt_doc}}}</div>
+        </div>
+    </div>
+</script>    
+"""
 
-# script = """
-# <script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
-# <script>
-#     const docs_template = document.getElementById("docs_template").innerHTML;
-#     const compiledTemplate = Handlebars.compile(docs_template);
-#     const html = compiledTemplate({ record });
-#     document.getElementById("docs_content").innerHTML = html;
-# </script>
-# """
+script = """
+<script src="https://cdn.jsdelivr.net/npm/handlebars@latest/dist/handlebars.js"></script>
+<script>
+    const docs_template = document.getElementById("docs_template").innerHTML;
+    const compiledTemplate = Handlebars.compile(docs_template);
+    const html = compiledTemplate({ record });
+    document.getElementById("docs_content").innerHTML = html;
+</script>
+"""
+
+
+def get_project_root() -> Path:
+    """Find project root by looking for pyproject.toml."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    return Path(__file__).resolve().parent.parent.parent
 
 # --- Models ---
 
@@ -534,16 +542,19 @@ def get_dataset_as_dataframe(
                 except Exception:
                     resps_list = []
                 
-                for idx, resp in enumerate(resps_list):
+                for resp in resps_list:
                     u_id = str(resp.user_id) if hasattr(resp, "user_id") else None
                     u_name = user_map.get(u_id, "unknown") if u_id else "unknown"
                     
-                    # Pull values from the serialized agg_responses dict
+                    # Correctly match values to this user by checking user_id in the aggregated dict
                     user_values = {}
                     for q_name, q_list in agg_responses.items():
-                        if isinstance(q_list, list) and idx < len(q_list):
-                            item = q_list[idx]
-                            user_values[q_name] = item.get("value") if isinstance(item, dict) else item
+                        if isinstance(q_list, list):
+                            # Find the item in this question's list that belongs to the current user
+                            for item in q_list:
+                                if isinstance(item, dict) and str(item.get("user_id")) == u_id:
+                                    user_values[q_name] = item.get("value")
+                                    break
                     
                     resp_data = {
                         "username": u_name,
