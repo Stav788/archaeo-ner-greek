@@ -172,3 +172,5 @@ tests/resources/out
 models/
 backups/
 backup/
+backup/*-bak.ipynb
+

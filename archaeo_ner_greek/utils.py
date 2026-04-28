@@ -73,6 +73,15 @@ script = """
 </script>
 """
 
+
+def get_project_root() -> Path:
+    """Find project root by looking for pyproject.toml."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    return Path(__file__).resolve().parent.parent.parent
+
+
 # --- Models ---
 
 class UserConfig(BaseModel):
@@ -466,10 +475,11 @@ def get_dataset_as_dataframe(
     client: rg.Argilla, 
     dataset_name: Union[str, rg.Dataset], 
     workspace_name: Optional[str] = None,
-    include_responses: bool = False
+    include_responses: bool = False,
+    username: Optional[str] = None
 ) -> pd.DataFrame:
     """
-    Exports an Argilla dataset to a pandas DataFrame.
+    Exports an Argilla dataset to a pandas DataFrame with optional filtering by username.
 
     Args:
         client: Authenticated Argilla client.
@@ -477,6 +487,11 @@ def get_dataset_as_dataframe(
         workspace_name: Workspace name (required if dataset_name is a string and not unique).
         include_responses: If True, includes a column 'responses' with a list of dictionaries 
                            containing {'username': ..., 'values': ..., 'status': ...}.
+<<<<<<< HEAD
+=======
+        username: Optional username to filter by. If provided, it automatically includes 
+                  responses and only returns records where this user has a response.
+>>>>>>> 7835b6d3f52ac4353ef6de9c406fa15a2388d6de
     """
     try:
         if isinstance(dataset_name, str):
@@ -488,6 +503,11 @@ def get_dataset_as_dataframe(
             logger.error(f"Dataset '{dataset_name}' not found.")
             return pd.DataFrame()
         
+        # Enable responses if username filtering is requested
+        if username:
+            include_responses = True
+            
+
         records = list(dataset.records)
         if not records:
             logger.warning(f"Dataset '{dataset.name}' is empty.")
@@ -508,18 +528,64 @@ def get_dataset_as_dataframe(
             row.update(r.metadata)
             
             if include_responses:
-                # Format: [{'username': 'prokopis', 'values': {...}, 'status': 'submitted'}, ...]
                 row["responses"] = []
-                for resp in r.responses:
-                    # logger.info(dir(resp))
-                    # In v2, response has user_id, not a user object
-                    u_id = str(resp.user_id) if resp.user_id else None
-                    row["responses"].append({
-                        "username": user_map.get(u_id, "unknown") if u_id else "unknown",
-                        "user_id": u_id,
-                        "values": resp.value,
-                        "status": resp.status
-                    })
+                target_user_response = None
+                
+                # Use list() to handle Argilla's custom containers (SearchRecordsList, etc.)
+                try:
+                    responses_source = list(r.responses) if r.responses is not None else []
+                except Exception:
+                    responses_source = []
+                
+                # SERIALLIZED SOURCE: Get the dict exactly as shown in your logs
+                record_dict = r.to_dict()
+                agg_responses = record_dict.get("responses", {})
+                
+                # Use list() to handle the objects for user identification
+                try:
+                    resps_list = list(r.responses)
+                except Exception:
+                    resps_list = []
+                
+                user_responses_map = {}
+                for resp in resps_list:
+                    u_id = str(resp.user_id) if hasattr(resp, "user_id") else None
+                    if not u_id: continue
+                    
+                    if u_id not in user_responses_map:
+                        user_responses_map[u_id] = {
+                            "username": user_map.get(u_id, "unknown"),
+                            "user_id": u_id,
+                            "values": {},
+                            "status": getattr(resp, "status", "unknown")
+                        }
+                    
+                    # Merge values from all questions for this specific user
+                    for q_name, q_list in agg_responses.items():
+                        if isinstance(q_list, list):
+                            for item in q_list:
+                                if isinstance(item, dict) and str(item.get("user_id")) == u_id:
+                                    user_responses_map[u_id]["values"][q_name] = item.get("value")
+                                    break
+                
+                # Finalize row responses and identify target user
+                for u_id, resp_data in user_responses_map.items():
+                    row["responses"].append(resp_data)
+                    if username and resp_data["username"] == username:
+                        target_user_response = resp_data
+                
+                # Filter by username if specified
+                if username:
+                    if not target_user_response:
+                        continue
+                    
+                    row["response"] = target_user_response
+                    final_v = target_user_response.get("values", {})
+                    
+                    # entities is now guaranteed to be in target_user_response['values']
+                    labels = final_v.get("entities", [])
+                    row["labels"] = labels if isinstance(labels, list) else []
+
             
             data.append(row)
         return pd.DataFrame(data)
