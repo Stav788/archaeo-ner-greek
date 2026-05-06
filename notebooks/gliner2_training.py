@@ -40,7 +40,7 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from training_utils import setup_local, setup_colab, df_to_gliner_examples, verify_annotations, plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split
+from training_utils import setup_local, setup_colab, df_to_gliner_examples, verify_annotations, plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, show_error_analysis
 
 # 1. Environment Detection & Pre-Import Setup
 IN_COLAB = 'google.colab' in sys.modules
@@ -143,12 +143,6 @@ logger.info(f"Unique documents identified: {df_all['doc_id'].nunique()}")
 logger.info("\n>>> DOC_ID MAPPING SAMPLE")
 logger.info(df_all[['document_sentence_id_field', 'doc_id']].head(10))
 
-# df_annotated = get_dataset_as_dataframe(
-#     client=configure_argilla_client(env_vars=env_vars),
-#     dataset_name=env_vars.get("ARGILLA_DATASET"),
-#     workspace_name=env_vars.get("ARGILLA_WORKSPACE"), 
-#     username=DEFAULT_ANNOTATOR
-# )
 
 if not df_all.empty:
     logger.info(f"Ready: {len(df_all)} samples loaded with 'labels' ready for training.")
@@ -203,42 +197,26 @@ logger.info(f"Grouped Split Results: Train={len(df_train)}, Val={len(df_val)}, T
 # ### Training examples
 
 # %%
-train_examples = df_to_gliner_examples(df_all, entity_descriptions)
+train_examples = df_to_gliner_examples(df_train, entity_descriptions)
+val_examples   = df_to_gliner_examples(df_val, entity_descriptions)
+test_examples  = df_to_gliner_examples(df_test, entity_descriptions)
 
-logger.info(f"Text: {train_examples[20].text}")
-logger.info(f"Entities: {train_examples[20].entities}")
-logger.info(train_examples[20].entities)
-logger.info(f'Entity descriptions example: ARTEFACT: {train_examples[20].entity_descriptions["ARTEFACT"]}')
-logger.info(train_examples[20])
+logger.info(f"Text Sample: {train_examples[0].text}")
+logger.info(f"Entities Sample: {train_examples[0].entities}")
 
 
 
 
 # %%
-train_dataset = TrainingDataset(train_examples)
-train_dataset.validate(raise_on_error=True)
 
-# The following may throw away one example (Gliner2 bug)
-# train_split, val_split, _ = train_dataset.split( 
-#     train_ratio=0.9, 
-#     val_ratio=0.1, 
-#     test_ratio=0.0, 
-#     shuffle=True, 
-#     seed=42
-# )
+train_split = TrainingDataset(train_examples)
+val_split   = TrainingDataset(val_examples)
+test_split  = TrainingDataset(test_examples) # Isolated Gold set for final benchmark
 
-all_examples = train_dataset.examples.copy()
-random.seed(42)
-random.shuffle(all_examples)
-val_size = int(len(all_examples) * 0.1) 
-val_split = all_examples[:val_size]      
-train_split = all_examples[val_size:]   
-logger.info(f"Train: {len(train_split)} | Val: {len(val_split)} | Total: {len(train_split) + len(val_split)}")
-train_split = TrainingDataset(train_split)
-val_split = TrainingDataset(val_split)
+logger.info(f"Grouped Stats: Train={len(train_split)} | Val={len(val_split)} | Test={len(test_split)}")
 
 
-for ds_name, ds in {"full": train_dataset, "train": train_split, "val":val_split}.items():
+for ds_name, ds in {"train": train_split, "val": val_split, "test": test_split}.items():
     logger.info(f"Dataset: {ds_name} ")
     ds.print_stats()
     logger.debug(ds[0])
@@ -252,53 +230,6 @@ for ds_name, ds in {"full": train_dataset, "train": train_split, "val":val_split
 # %%
 THRESHOLD = 0.8
 
-def compute_metrics(model, dataset, threshold=THRESHOLD):
-    """Bulleted Micro-F1 calculation with local path-based schema loading."""
-    tp, fp, fn = 0, 0, 0
-    model.eval()
-
-    for i, ex in enumerate(dataset):
-        logger.debug(ex)
-        # Inference
-        text = ex[0]
-        gt_entities = ex[1]["entities"] # Ground truth entities
-        entity_descriptions = ex[1]["entity_descriptions"]
-
-        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
-        pred_entities = output.get('entities', {})
-        
-        # Flatten pred spans
-        pred_spans = []
-        for lbl, texts in pred_entities.items():
-            for t in texts:
-                pred_spans.append((t, lbl))
-        
-        # Flatten gt spans
-        gt_spans = []
-        for lbl, texts in gt_entities.items():
-            for t in texts:
-                gt_spans.append((t, lbl))
-        
-        # Exact Match logic (order insensitive)
-        temp_gt = gt_spans.copy()
-        for p in pred_spans:
-            if p in temp_gt:
-                tp += 1
-                temp_gt.remove(p)
-            else:
-                fp += 1
-        fn += len(temp_gt)
-
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-    
-    metrics = {"f1": f1, "precision": precision, "recall": recall, "tp": tp, "fp": fp, "fn": fn}
-    formatted_metrics = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in metrics.items()}
-    logger.info(f"\n>>> EVAL: {formatted_metrics}")
-    sys.stdout.flush()
-    
-    return metrics
 
 
 
@@ -386,9 +317,6 @@ best_p = best_run['precision']
 best_r = best_run['recall']
 best_f1 = best_run['f1']
 total_epochs = len(results["eval_metrics_history"])
-def get_cnt(data):
-    exs = getattr(data, "examples", data)
-    return sum(len(mentions) for ex in exs for mentions in ex.entities.values())
 
 logger.info(f"Training completed!")
 logger.info(f"Experiment name: {experiment_name}")
@@ -399,9 +327,9 @@ logger.info(f"Best Epoch: {best_epoch + 1}/{total_epochs}") # +1 for 1-based ind
 logger.info(f"Best PRF: Precision: {best_p:.4f}, Recall: {best_r:.4f}, F1: {best_f1:.4f}")
 # 2. Prepare data rows
 table_data = [
-    ["Train Split",  len(train_split),             get_cnt(train_split)],
-    ["Val Split",    len(val_split),               get_cnt(val_split)],
-    ["Full Dataset", len(train_dataset.examples), get_cnt(train_dataset)]
+    ["Train Split",   len(train_split), get_cnt(train_split)],
+    ["Val Split",     len(val_split),   get_cnt(val_split)],
+    ["Gold Test Set", len(test_split),  get_cnt(test_split)]
 ]
 # 3. Print table
 logger.info(tabulate(table_data, headers=["Subset", "Samples", "Mentions"], tablefmt="rounded_grid"))
@@ -439,28 +367,6 @@ best_model.load_adapter(adapter_path)
 logger.info("Adapter loaded.")
 
 
-def evaluate_adapter(model, adapter_path, test_data, threshold=THRESHOLD):
-    """
-    Loads a specific LoRA adapter and evaluates its performance.
-    """
-    # 1. Load the specific weights
-    logger.info(f"Loading adapter from: {adapter_path}")
-    model.load_adapter(adapter_path)
-    
-    test_data = [
-        (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
-        for ex in test_data
-    ]
-
-    # 2. Execute metric calculation
-    results = compute_metrics(model, test_data, threshold=threshold)
-    logger.info(f"\n--- EVALUATION RESULTS ({adapter_path.name}) threshold: {threshold} ---")
-    logger.info(f"F1 Score : {results['f1']}")
-    logger.info(f"Precision: {results['precision']}")
-    logger.info(f"Recall   : {results['recall']}")
-    logger.info(f"Counts   : TP={results['tp']}, FP={results['fp']}, FN={results['fn']}")
-    
-    return results
 
 final_results = evaluate_adapter(best_model, adapter_path, val_split, threshold=THRESHOLD )
 
@@ -505,19 +411,10 @@ DEFAULT_ANNOTATOR = env_vars.get("ANNOTATOR_A")
 # Remove the redundant reload from ARGILLA_TEST_DATASET
 # df_annotated = get_dataset_as_dataframe(...) was here
 
-test_examples = df_to_gliner_examples(df_all, entity_descriptions)
+# Use the isolated test set created during the grouped split
+test_dataset = test_split
 
-logger.info(f"Text: {test_examples[20].text}")
-logger.info(f"Entities: {test_examples[20].entities}")
-logger.info(test_examples[20].entities)
-logger.info(f'Entity descriptions example: ARTEFACT: {test_examples[20].entity_descriptions["ARTEFACT"]}')
-logger.info(test_examples[20])
-
-
-test_dataset = TrainingDataset(test_examples)
-test_dataset.validate(raise_on_error=True)
-
-for ds_name, ds in {"TEST": test_dataset}.items():
+for ds_name, ds in {"GOLD TEST SET": test_dataset}.items():
     logger.info(f"Dataset: {ds_name} ")
     ds.print_stats()
     logger.debug(ds[0])
@@ -543,59 +440,9 @@ test_data_formatted = [
 # ## Confusion matrix
 
 # %%
-def plot_ner_confusion_matrix(model, dataset, threshold=THRESHOLD):
-    y_true = []
-    y_pred = []
-    labels = list(entity_descriptions.keys())
-    
-    # 1. Collect all spans
-    for ex in dataset:
-        text, gt_entities = ex[0], ex[1]["entities"]
-        
-        # Ground Truth spans
-        gt_spans = []
-        for lbl, texts in gt_entities.items():
-            for t in texts: gt_spans.append((t, lbl))
-            
-        # Prediction spans
-        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
-        pred_entities = output.get('entities', {})
-        pred_spans = []
-        for lbl, texts in pred_entities.items():
-            for t in texts: pred_spans.append((t, lbl))
-            
-        # 2. Match spans (Exact match logic)
-        temp_pred = pred_spans.copy()
-        for t_gt, lbl_gt in gt_spans:
-            # Did we find this text/span?
-            match = next((p for p in temp_pred if p[0] == t_gt), None)
-            if match:
-                y_true.append(lbl_gt)
-                y_pred.append(match[1]) # record pred label (could be same or different)
-                temp_pred.remove(match)
-            else:
-                y_true.append(lbl_gt)
-                y_pred.append("O") # False Negative
-        
-        # Remaining predictions are False Positives
-        for t_p, lbl_p in temp_pred:
-            y_true.append("O")
-            y_pred.append(lbl_p)
+# Plot confusion matrix using the utility function
+plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, threshold=THRESHOLD)
 
-    # 3. Create Matrix
-    all_labels = labels + ["O"]
-    cm = confusion_matrix(y_true, y_pred, labels=all_labels)
-    
-    # 4. Plot
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', xticklabels=all_labels, yticklabels=all_labels, cmap='Blues')
-    plt.title(f"NER Confusion Matrix (Threshold: {threshold})")
-    plt.ylabel('Actual Label')
-    plt.xlabel('Predicted Label')
-    plt.show()
-
-# Run it
-plot_ner_confusion_matrix(best_model, test_data_formatted, threshold=THRESHOLD)
 
 
 # %% [markdown]
@@ -611,36 +458,9 @@ plot_ner_confusion_matrix(best_model, test_data_formatted, threshold=THRESHOLD)
 #  ## Error Analysis 
 
 # %%
-def show_error_analysis(model, dataset, threshold=0.8, num_examples=5):
-    print(f"--- QUALITATIVE ERROR ANALYSIS (Threshold: {threshold}) ---\n")
-    
-    for i, ex in enumerate(dataset[:num_examples]):
-        text, gt_entities = ex[0], ex[1]["entities"]
-        
-        # 1. Get Predictions
-        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
-        pred_entities = output.get('entities', {})
-        
-        # 2. Flatten for comparison
-        gt_spans = [(t, lbl) for lbl, texts in gt_entities.items() for t in texts]
-        pred_spans = [(t, lbl) for lbl, texts in pred_entities.items() for t in texts]
-        
-        # 3. Categorize
-        tp = [p for p in pred_spans if p in gt_spans]
-        fp = [p for p in pred_spans if p not in gt_spans]
-        fn = [g for g in gt_spans if g not in pred_spans]
-        
-        # 4. Display
-        print(f"EXAMPLE {i+1}:")
-        print(f"TEXT: {text[:150]}...")
-        
-        if tp: print(f"  [TPs]: {tp}")
-        if fp: print(f"  \033[91m[FPs]: {fp}\033[0m") # Red
-        if fn: print(f"  \033[93m[FNs]: {fn}\033[0m") # Yellow
-        print("-" * 50)
 
 # Run on the first N examples
-show_error_analysis(best_model, test_data_formatted, threshold=THRESHOLD, num_examples=50)
+show_error_analysis(best_model, test_data_formatted, entity_descriptions, threshold=THRESHOLD, num_examples=50)
 
 
 # %% [markdown]
