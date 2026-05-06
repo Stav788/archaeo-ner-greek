@@ -40,7 +40,13 @@ import os
 import sys
 import subprocess
 from pathlib import Path
-from training_utils import setup_local, setup_colab, df_to_gliner_examples, verify_annotations, plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, show_error_analysis
+from training_utils import (
+    setup_local, setup_colab, df_to_gliner_examples, verify_annotations, 
+    plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, 
+    plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, 
+    show_error_analysis, VERIFICATION_TARGET_IDS, VERIFICATION_TARGETS, 
+    VERIFICATION_PAIR_TEXT, VERIFICATION_PAIR_LABEL
+)
 
 # 1. Environment Detection & Pre-Import Setup
 IN_COLAB = 'google.colab' in sys.modules
@@ -71,7 +77,7 @@ from sklearn.metrics import confusion_matrix
 
 # Local project imports
 import archaeo_ner_greek
-from archaeo_ner_greek.logging_config import LOGGING_CONFIG
+from archaeo_ner_greek.logging_config import setup_logging
 from archaeo_ner_greek.utils import (
     configure_argilla_client,
     get_dataset_as_dataframe,
@@ -84,8 +90,9 @@ MODELS_DIR = DATA_DIR / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # 4. Logging & Global Config
-dictConfig(LOGGING_CONFIG)
+log_file = setup_logging()
 logger = logging.getLogger(__name__)
+logger.info(f">>> Logging to: {log_file}")
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=SyntaxWarning)
@@ -172,19 +179,14 @@ logger.info(f"Labels: {list(entity_descriptions.keys())}")
 logger.info(f"Example: ARTEFACT: {entity_descriptions['ARTEFACT']}")
 
 # %%
-df_all.head(5)
-# # Updated Verification block
-target_ids = [
-    "4d82e2e6-02c9-4fef-81f0-191ae553cb0f",
-    "80811c3d-c530-4420-a660-da15a3459cfe",
-    "2003_culture.gov_excavation_1371_10",
-    "2025_nationalarchive_K7F58Y_598308_1"
-]
-targets = ["αστρικό κόσμημα", "τριπτά εργαλεία"]
-pair_text = "παραστάδες"
-pair_label = "FEATURE"
-
-verify_annotations(df_all, target_ids, targets, pair_text, pair_label, DEFAULT_ANNOTATOR)
+verify_annotations(
+    df_all, 
+    VERIFICATION_TARGET_IDS, 
+    VERIFICATION_TARGETS, 
+    VERIFICATION_PAIR_TEXT, 
+    VERIFICATION_PAIR_LABEL, 
+    DEFAULT_ANNOTATOR
+)
 
 # %% [markdown]
 # ### Document-level Grouped Split (80/10/10)
@@ -339,15 +341,7 @@ logger.info(tabulate(table_data, headers=["Subset", "Samples", "Mentions"], tabl
 # ## Training progress
 
 # %%
-import matplotlib.pyplot as plt
-
-# 1. Extract metrics from history
-history = results['eval_metrics_history']
-epochs = [h['epoch'] + 1 for h in history]
-f1_scores = [h['f1'] for h in history]
-precision = [h['precision'] for h in history]
-recall = [h['recall'] for h in history]
-losses = [h['eval_loss'] for h in history]
+# Training history visualization
 
 # 2. Setup the plot
 plot_training_history(results)
@@ -422,7 +416,7 @@ for ds_name, ds in {"GOLD TEST SET": test_dataset}.items():
 
 
 # %%
-# FINAL RESULTS BECOME FINAL RESULTS ON THE TEST SET!!!!!!!!!!!!!!!!!!!!!!!!
+# FINAL RESULTS ON THE TEST SET
 
 logger.info(f"Started evaluating model from {adapter_path}")
 final_results = evaluate_adapter(best_model, adapter_path, test_dataset, threshold=0.8 )
@@ -432,7 +426,7 @@ logger.info(f"Done evaluating model from {adapter_path}")
 # 1. Prepare data once
 test_data_formatted = [
     (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
-    for ex in test_dataset # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    for ex in test_dataset
 ]
 
 
