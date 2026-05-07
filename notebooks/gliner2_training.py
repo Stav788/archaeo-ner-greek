@@ -45,7 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.2.8")
+    print("Pipeline Version: 1.2.9")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
@@ -163,8 +163,15 @@ df_test = get_dataset_as_dataframe(
 df_all = pd.concat([df_train, df_test], ignore_index=True)
 logger.info(f"Merged Data: {len(df_all)} samples (Train: {len(df_train)}, Test: {len(df_test)})")
 
-# Analysis for Grouped Splitting
-logger.info("\n>>> DATASET ANALYSIS FOR GROUPING")
+if df_all.empty:
+    logger.error("FATAL: The merged dataset is EMPTY. Verify that:")
+    logger.error(f"1. Your ANNOTATOR_A ('{env_vars.get('ANNOTATOR_A')}') has submitted responses in Argilla.")
+    logger.info(f"2. The dataset names '{env_vars.get('ARGILLA_DATASET')}' are correct.")
+    raise ValueError("Dataset is empty. Cannot continue training.")
+
+if 'labels' not in df_all.columns:
+    logger.error("FATAL: 'labels' column missing in dataset.")
+    raise KeyError("Missing 'labels' column. Ensure Argilla responses are correctly formatted.")
 logger.info(f"Columns: {df_all.columns.tolist()}")
 logger.info("Sample IDs (First 10):")
 logger.info(df_all['id'].head(10).tolist())
