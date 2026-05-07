@@ -45,8 +45,9 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.3.0")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf"])
+    print("Pipeline Version: 1.3.1")
+    # Force upgrade critical dependencies
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
         from google.colab import userdata

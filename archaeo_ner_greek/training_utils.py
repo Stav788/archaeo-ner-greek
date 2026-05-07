@@ -29,7 +29,7 @@ def setup_local():
 
 def setup_colab():
     """Sets up Google Colab environment: installs deps, clones repo, and loads secrets."""
-    logger.info("Pipeline Version: 1.3.0")
+    logger.info("Pipeline Version: 1.3.1")
     logger.info(">>> Environment: Google Colab")
     from google.colab import userdata
     
