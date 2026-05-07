@@ -29,7 +29,7 @@ def setup_local():
 
 def setup_colab():
     """Sets up Google Colab environment: installs deps, clones repo, and loads secrets."""
-    logger.info("Pipeline Version: 1.3.1")
+    logger.info("Pipeline Version: 1.3.2")
     logger.info(">>> Environment: Google Colab")
     from google.colab import userdata
     
@@ -62,18 +62,19 @@ def setup_colab():
     import importlib
     importlib.invalidate_caches()
 
-    # Verification Step
-    try:
-        import mammoth
-        import markdownify
-        logger.info("Verification Successful: mammoth and markdownify are ready.")
-    except ImportError as e:
-        logger.error(f"Critical Verification Failed: {e}")
-        raise
-
     def get_secret(key):
         try: return userdata.get(key)
         except: return None
+
+    # 4. WandB Authentication
+    wandb_key = get_secret("WANDB_API_KEY")
+    if wandb_key:
+        try:
+            import wandb
+            wandb.login(key=wandb_key)
+            logger.info("WandB: Logged in successfully.")
+        except Exception as e:
+            logger.warning(f"WandB: Login failed: {e}")
 
     return {
         "ARGILLA_API_URL": get_secret("ARGILLA_API_URL"),
@@ -82,6 +83,7 @@ def setup_colab():
         "ARGILLA_DATASET": get_secret("ARGILLA_DATASET"),
         "ARGILLA_TEST_DATASET": get_secret("ARGILLA_TEST_DATASET"),
         "ANNOTATOR_A": get_secret("ANNOTATOR_A"),
+        "WANDB_API_KEY": wandb_key
     }
 
 def df_to_gliner_examples(df, entity_descriptions):

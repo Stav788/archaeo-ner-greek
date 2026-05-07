@@ -45,7 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.3.1")
+    print("Pipeline Version: 1.3.2")
     # Force upgrade critical dependencies
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
