@@ -176,4 +176,5 @@ backup/*-bak.ipynb
 
 # WandB
 wandb/
+.agents/
 
