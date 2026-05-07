@@ -45,8 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.2.6")
-    # Nuclear fix for Protobuf version conflict: Force upgrade to 6.x
+    print("Pipeline Version: 1.2.7")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
