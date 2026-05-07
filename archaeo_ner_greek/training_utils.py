@@ -54,6 +54,10 @@ def setup_colab():
     # 2. Use uv to install the project and all dependencies into the system environment
     logger.info("Installing project dependencies via uv...")
     subprocess.check_call(["uv", "pip", "install", "--system", "-e", "."])
+    
+    # Force Python to re-scan for the newly installed packages
+    import importlib
+    importlib.invalidate_caches()
 
     def get_secret(key):
         try: return userdata.get(key)
