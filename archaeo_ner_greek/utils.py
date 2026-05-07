@@ -81,6 +81,7 @@ def get_project_root() -> Path:
             return parent
     return Path(__file__).resolve().parent.parent.parent
 
+
 # --- Models ---
 
 class UserConfig(BaseModel):
@@ -486,8 +487,11 @@ def get_dataset_as_dataframe(
         workspace_name: Workspace name (required if dataset_name is a string and not unique).
         include_responses: If True, includes a column 'responses' with a list of dictionaries 
                            containing {'username': ..., 'values': ..., 'status': ...}.
+<<<<<<< HEAD
+=======
         username: Optional username to filter by. If provided, it automatically includes 
                   responses and only returns records where this user has a response.
+>>>>>>> 7835b6d3f52ac4353ef6de9c406fa15a2388d6de
     """
     try:
         if isinstance(dataset_name, str):
@@ -503,6 +507,7 @@ def get_dataset_as_dataframe(
         if username:
             include_responses = True
             
+
         records = list(dataset.records)
         if not records:
             logger.warning(f"Dataset '{dataset.name}' is empty.")
@@ -580,6 +585,7 @@ def get_dataset_as_dataframe(
                     # entities is now guaranteed to be in target_user_response['values']
                     labels = final_v.get("entities", [])
                     row["labels"] = labels if isinstance(labels, list) else []
+
             
             data.append(row)
         return pd.DataFrame(data)
