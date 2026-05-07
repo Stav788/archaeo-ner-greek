@@ -39,6 +39,27 @@
 # %%
 import os
 import sys
+import subprocess
+
+# --- STANDALONE BOOTSTRAP FOR COLAB ---
+# Clones the repo and sets paths BEFORE internal package imports.
+IN_COLAB = 'google.colab' in sys.modules
+if IN_COLAB:
+    try:
+        from google.colab import userdata
+        GITHUB_TOKEN = userdata.get('GITHUB_TOKEN')
+        REPO_NAME = "archaeo-ner-greek"
+        if not os.path.exists(REPO_NAME):
+            REPO_URL = f"https://{GITHUB_TOKEN}@github.com/Stav788/{REPO_NAME}.git"
+            subprocess.check_call(["git", "clone", "--branch", "dev", REPO_URL])
+        
+        if os.path.abspath(REPO_NAME) not in sys.path:
+            sys.path.append(os.path.abspath(REPO_NAME))
+        os.chdir(REPO_NAME)
+    except Exception as e:
+        print(f"Colab bootstrap failed: {e}")
+
+# %%
 import json
 import logging
 import warnings
@@ -53,7 +74,7 @@ try:
     WANDB_AVAILABLE = True
 except ImportError:
     WANDB_AVAILABLE = False
-import subprocess
+
 from archaeo_ner_greek.training_utils import (
     setup_local, setup_colab, df_to_gliner_examples, verify_annotations, 
     plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, 
@@ -65,8 +86,6 @@ from archaeo_ner_greek.training_utils import (
 )
 
 # 1. Environment Detection & Pre-Import Setup
-IN_COLAB = 'google.colab' in sys.modules
-
 if IN_COLAB:
     env_vars = setup_colab()
 else:
