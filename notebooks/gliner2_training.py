@@ -45,7 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.2.9")
+    print("Pipeline Version: 1.3.0")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
@@ -150,14 +150,14 @@ df_train = get_dataset_as_dataframe(
     client=client,
     dataset_name=env_vars.get("ARGILLA_DATASET"),
     workspace_name=workspace, 
-    username=DEFAULT_ANNOTATOR
+    username=env_vars.get("ANNOTATOR_A")
 )
 
 df_test = get_dataset_as_dataframe(
     client=client,
     dataset_name=env_vars.get("ARGILLA_TEST_DATASET"),
     workspace_name=workspace, 
-    username=DEFAULT_ANNOTATOR
+    username=env_vars.get("ANNOTATOR_A")
 )
 
 df_all = pd.concat([df_train, df_test], ignore_index=True)
