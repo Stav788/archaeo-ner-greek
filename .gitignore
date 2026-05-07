@@ -174,3 +174,6 @@ backups/
 backup/
 backup/*-bak.ipynb
 
+# WandB
+wandb/
+
