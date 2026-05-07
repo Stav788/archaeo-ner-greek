@@ -1,6 +1,7 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
 #       format_name: percent
@@ -13,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Gliner2 training on archaeological NER data
+# # Fine-tuning GLiNER2 for Archaeological Named Entity Recognition
 #
 
 # %% [markdown]
@@ -33,18 +34,33 @@
 # * Toggle **Notebook access** to **ON** for all listed secrets.
 
 # %% [markdown]
-# ## Init
+# ## Environment Initialization & Configuration
 
 # %%
 import os
 import sys
-import subprocess
+import json
+import logging
+import warnings
+import random
+from datetime import datetime
+from logging.config import dictConfig
 from pathlib import Path
+
+# Try to import wandb (optional)
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+import subprocess
 from training_utils import (
     setup_local, setup_colab, df_to_gliner_examples, verify_annotations, 
     plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, 
     plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, 
-    show_error_analysis, VERIFICATION_TARGET_IDS, VERIFICATION_TARGETS, 
+    show_error_analysis, find_best_split_seeds, show_detailed_report,
+    safe_wandb_log, setup_wandb, upload_wandb_artifact,
+    DEFAULT_ANNOTATOR, VERIFICATION_TARGET_IDS, VERIFICATION_TARGETS, 
     VERIFICATION_PAIR_TEXT, VERIFICATION_PAIR_LABEL
 )
 
@@ -56,17 +72,9 @@ if IN_COLAB:
 else:
     env_vars = setup_local()
 
-# 2. Optimized Imports (Now safe because packages are installed/pathed)
-import json
-import logging
-import warnings
-import random
-from datetime import datetime
-from logging.config import dictConfig
-
+# 2. Optimized Imports
 from tabulate import tabulate
 import matplotlib.pyplot as plt
-
 import torch
 from gliner2 import GLiNER2
 from gliner2.training.data import InputExample, TrainingDataset
@@ -98,21 +106,21 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=SyntaxWarning)
 warnings.filterwarnings(action="ignore", message=r"datetime.datetime.utcnow")
 warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*SwigPyObject.*")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="wandb")
 
 logger.info(f">>> Working Directory: {BASE_DIR}")
 logger.info(f">>> Models Directory:  {MODELS_DIR}")
 logger.info(f">>> Dataset:  {env_vars['ARGILLA_DATASET']}")
 logger.info(f">>> Test dataset: {env_vars['ARGILLA_TEST_DATASET']}")
 
-
-
+# WandB Status for later logging
+wandb_enabled = WANDB_AVAILABLE and env_vars.get("WANDB_API_KEY") is not None
 
 # %% [markdown]
 # ## Data Loading and Preprocessing
 #
 
 # %%
-DEFAULT_ANNOTATOR = env_vars.get("ANNOTATOR_A")
 client = configure_argilla_client(env_vars=env_vars)
 workspace = env_vars.get("ARGILLA_WORKSPACE")
 
@@ -144,6 +152,9 @@ if 'metadata' in df_all.columns:
 else:
     logger.info("No 'metadata' column found.")
 
+# Data is already filtered by get_dataset_as_dataframe(username=DEFAULT_ANNOTATOR)
+logger.info(f"Using data for annotator: {DEFAULT_ANNOTATOR}")
+
 # Extract Parent Document IDs
 df_all['doc_id'] = extract_doc_ids(df_all)
 logger.info(f"Unique documents identified: {df_all['doc_id'].nunique()}")
@@ -164,7 +175,7 @@ if not df_all.empty:
     logger.debug(f"Full Response Dict: {json.dumps(row['response'], indent=2, ensure_ascii=False)}")
 
 # %% [markdown]
-# ### Guidelines to entities descriptions 
+# ### Semantic Schema & Entity Label Definitions 
 
 # %%
 # Dynamically find the package resources folder
@@ -189,14 +200,28 @@ verify_annotations(
 )
 
 # %% [markdown]
-# ### Document-level Grouped Split (80/10/10)
+# ### Document-Aware Stratified Partitioning (80/10/10)
 
 # %%
-# Create grouped splits to ensure no document leakage
-df_train, df_val, df_test = grouped_split(df_all, group_col='doc_id')
-logger.info(f"Grouped Split Results: Train={len(df_train)}, Val={len(df_val)}, Test={len(df_test)}")
+# Find the most balanced split across 100 random seeds
+logger.info("Searching for the most balanced document split (Best-of-100)...")
+best_seeds = find_best_split_seeds(df_all, group_col='doc_id', num_trials=100, top_n=5)
+
+# Log the top candidates for transparency
+for i, candidate in enumerate(best_seeds):
+    counts = candidate['counts']
+    logger.info(f"Top {i+1}: Seed {candidate['seed']} | Split Counts: Train={counts[0]}, Val={counts[1]}, Test={counts[2]}")
+
+# Select the absolute best seed
+BEST_SEED = best_seeds[0]['seed']
+logger.info(f"Selecting BEST_SEED={BEST_SEED} for this experiment.")
+
+# Create the final grouped splits
+df_train, df_val, df_test = grouped_split(df_all, group_col='doc_id', seed=BEST_SEED)
+logger.info(f"Final Split Ratios: Train={len(df_train)/len(df_all):.1%}, Val={len(df_val)/len(df_all):.1%}, Test={len(df_test)/len(df_all):.1%}")
+
 # %% [markdown]
-# ### Training examples
+# ### Dataset Serialization for GLiNER2
 
 # %%
 train_examples = df_to_gliner_examples(df_train, entity_descriptions)
@@ -224,25 +249,33 @@ for ds_name, ds in {"train": train_split, "val": val_split, "test": test_split}.
     logger.debug(ds[0])
 
 # %% [markdown]
-# # Training
-
-# %% [markdown]
-# ## Custom metrics for evaluation
-
-# %%
-THRESHOLD = 0.8
-
-
+# # Model Optimization & Fine-tuning
 
 
 # %% [markdown]
-# ## Training config
+# ## Hyperparameter & Architecture Configuration
 
 # %%
 experiment_name = f"gliner2_archaeo_lora_{datetime.now().strftime('%Y%m%d_%H%M')}"
 output_dir = DATA_DIR / "models" / experiment_name
 output_dir.mkdir(parents=True, exist_ok=True)
-num_epochs = 30
+
+# Save Split Manifest for reproducibility
+split_manifest = {
+    "train": sorted(df_train['doc_id'].unique().tolist()),
+    "val": sorted(df_val['doc_id'].unique().tolist()),
+    "test": sorted(df_test['doc_id'].unique().tolist()),
+    "stats": {
+        "train_samples": len(df_train),
+        "val_samples": len(df_val),
+        "test_samples": len(df_test)
+    },
+    "seed": BEST_SEED
+}
+with open(output_dir / "split_manifest.json", "w") as f:
+    json.dump(split_manifest, f, indent=4)
+logger.info(f"Split Manifest saved to {output_dir}/split_manifest.json")
+num_epochs = 3
 
 
 training_config = TrainingConfig(
@@ -272,9 +305,11 @@ training_config = TrainingConfig(
     weight_decay=0.01,
 
 
-    # Checkpointing (Accuracy follows F1)
-    eval_strategy="epoch",
+    # Evaluation & Logging
+    eval_strategy="epoch",         # Saves best checkpoint at end of every epoch
     save_best=True,
+    report_to_wandb=wandb_enabled,
+    wandb_project=env_vars.get("WANDB_PROJECT", "archaeo-ner-greek"),
     metric_for_best="f1",        # Use F1 to drive selection
     greater_is_better=True,      # Higher is better
     # metric_for_best="eval_loss", # Use Loss to drive selection
@@ -290,15 +325,23 @@ training_config = TrainingConfig(
     validate_data=True,
 )
 
+# Initialize WandB run & capture logging function
+log_to_wandb = setup_wandb(wandb_enabled, training_config.wandb_project, experiment_name, training_config)
+
 # %% [markdown]
-# ## Trainer
+# ## Base Model Instantiation
 
 # %%
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1") # Multi-tasking, multilingual
+model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+
+# %% [markdown]
+# ## Training Engine Setup (GLiNER2Trainer)
+
+# %%
 trainer = GLiNER2Trainer(model, training_config, compute_metrics=compute_metrics)
 
 # %% [markdown]
-# ## Train run
+# ## Execution of Fine-tuning Pipeline
 
 # %%
 results = trainer.train(
@@ -307,10 +350,10 @@ results = trainer.train(
 )
 
 # %% [markdown]
-# # Analysis
+# # Evaluation & Error Diagnostics
 
 # %% [markdown]
-# ## Training details
+# ## Post-Training Session Summary
 
 # %%
 best_run = max(results["eval_metrics_history"], key=lambda x: x['f1'])
@@ -334,11 +377,11 @@ table_data = [
     ["Gold Test Set", len(test_split),  get_cnt(test_split)]
 ]
 # 3. Print table
-logger.info(tabulate(table_data, headers=["Subset", "Samples", "Mentions"], tablefmt="rounded_grid"))
+print(tabulate(table_data, headers=["Subset", "Samples", "Mentions"], tablefmt="grid"))
 
 
 # %% [markdown]
-# ## Training progress
+# ## Convergence Analysis & Loss Visualization
 
 # %%
 # Training history visualization
@@ -348,7 +391,7 @@ plot_training_history(results)
 
 
 # %% [markdown]
-# ## Evaluation on dev using the best LoRA
+# ## Model Validation & Checkpoint Selection (Dev Set)
 
 # %%
 
@@ -360,82 +403,110 @@ best_model.load_adapter(adapter_path)
 # 3. Ready for inference
 logger.info("Adapter loaded.")
 
-
-
-final_results = evaluate_adapter(best_model, adapter_path, val_split, threshold=THRESHOLD )
-
-
 # %% [markdown]
-# ## Threshold & Precision-Recall Analysis
-#
+# ## Inference Threshold Calibration
+# We determine the optimal confidence threshold using the Validation Set to maximize the F1-score.
 
 # %%
-
 # 1. Prepare data once
-test_data_formatted = [
+val_data_formatted = [
     (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
     for ex in val_split
 ]
 
-# 2. Iterate through thresholds
-thresholds = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+# 2. Iterate through thresholds to find the best F1
+thresholds = [0.4, 0.5, 0.6, 0.7, 0.8]
 p_scores = []
 r_scores = []
 f1_scores = []
 
-logger.info("Analyzing Precision-Recall trade-off (N=21)")
+best_threshold = 0.5
+best_val_f1 = 0
+
+logger.info(f"Finding optimal threshold on validation set ({len(val_split)} samples)...")
 
 for t in thresholds:
-    print(f"\n[Threshold: {t:.2f}]", end=" ") 
-    res = compute_metrics(best_model, test_data_formatted, threshold=t)
+    logger.info(f"Evaluating threshold: {t}...")
+    res = compute_metrics(best_model, val_data_formatted, threshold=t)
     p_scores.append(res['precision'])
     r_scores.append(res['recall'])
     f1_scores.append(res['f1'])
+    
+    if res['f1'] > best_val_f1:
+        best_val_f1 = res['f1']
+        best_threshold = t
 
-logger.info("Done analyzing Precision-Recall trade-off (N=21)")
+logger.info(f">>> Optimal Threshold Found: {best_threshold} (Val F1: {best_val_f1:.4f})")
 
-# 3. Visualization
-plot_threshold_curves(thresholds, p_scores, r_scores, f1_scores, THRESHOLD)
+# 3. Visualization of the search space
+plot_threshold_curves(thresholds, p_scores, r_scores, f1_scores, best_threshold)
 
 # %% [markdown]
-# ## Evaluation on test set
+# ## Zero-Shot Performance Baseline
+# Comparative evaluation of the base model's zero-shot capabilities prior to domain adaptation.
 
 # %%
-DEFAULT_ANNOTATOR = env_vars.get("ANNOTATOR_A")
-# Remove the redundant reload from ARGILLA_TEST_DATASET
-# df_annotated = get_dataset_as_dataframe(...) was here
+logger.info("Evaluating Zero-Shot Baseline...")
+# Load fresh base model without adapters
+zero_shot_model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+zero_shot_model.to(best_model.device)
 
+# Prepare test data
+test_data_formatted = [
+    (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
+    for ex in test_split
+]
+
+# Evaluate at a standard threshold (0.5)
+zs_results = compute_metrics(zero_shot_model, test_data_formatted, threshold=0.5)
+
+logger.info("\n" + "="*40)
+logger.info("ZERO-SHOT BASELINE RESULTS")
+logger.info(f"F1 Score : {zs_results['f1']:.4f}")
+logger.info(f"Precision: {zs_results['precision']:.4f}")
+logger.info(f"Recall   : {zs_results['recall']:.4f}")
+logger.info("="*40)
+
+# Log to WandB
+log_to_wandb(zs_results, prefix="zero_shot_")
+
+# %% [markdown]
+# ## Final Benchmarking on Isolated Gold Test Set
+# Evaluation of the optimized adapter using the calibrated inference threshold.
+
+# %%
 # Use the isolated test set created during the grouped split
 test_dataset = test_split
-
-for ds_name, ds in {"GOLD TEST SET": test_dataset}.items():
-    logger.info(f"Dataset: {ds_name} ")
-    ds.print_stats()
-    logger.debug(ds[0])
-
-
-
-# %%
-# FINAL RESULTS ON THE TEST SET
-
-logger.info(f"Started evaluating model from {adapter_path}")
-final_results = evaluate_adapter(best_model, adapter_path, test_dataset, threshold=0.8 )
-logger.info(f"Done evaluating model from {adapter_path}")
-
-# %%
-# 1. Prepare data once
 test_data_formatted = [
     (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
     for ex in test_dataset
 ]
 
+logger.info(f"Started evaluating model on GOLD TEST SET using optimal threshold: {best_threshold}")
+final_results = evaluate_adapter(best_model, adapter_path, test_dataset, threshold=best_threshold)
+logger.info(f"Done evaluating model.")
 
+# Log final benchmark to WandB
+log_to_wandb(final_results, prefix="gold_test_")
+
+# Upload Best Adapter as Artifact
+upload_wandb_artifact(wandb_enabled, adapter_path, experiment_name)
+
+if wandb_enabled:
+    wandb.finish()
 # %% [markdown]
-# ## Confusion matrix
+# ## Granular Performance Metrics by Entity Class
+# Precision, Recall, and F1-score disaggregated by archaeological entity types.
 
 # %%
-# Plot confusion matrix using the utility function
-plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, threshold=THRESHOLD)
+show_detailed_report(best_model, test_data_formatted, threshold=best_threshold)
+
+# %% [markdown]
+# ## Categorical Confusion Analysis
+
+# %%
+# Plot confusion matrix using the optimized threshold
+plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold)
 
 
 
@@ -448,25 +519,10 @@ plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, 
 # *   **Off-Diagonal (Non-"O")**: Label Misclassification. The model found the correct text span but assigned the wrong category (e.g., predicted `CONTEXT` for an `ARTEFACT`).
 #
 
-# %% [markdown]
-#  ## Error Analysis 
-
-# %%
-
-# Run on the first N examples
-show_error_analysis(best_model, test_data_formatted, entity_descriptions, threshold=THRESHOLD, num_examples=50)
+# Run error analysis using the optimized threshold
+show_error_analysis(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold, num_examples=50)
 
 
 # %% [markdown]
-# # Model saving if on Colab
-
-# %%
-if IN_COLAB:
-    import shutil
-    from google.colab import files
-    # 1. Zip the adapter folder using pure Python
-    # This creates 'best_model.zip' from the adapter_path folder
-    shutil.make_archive("best_model", "zip", adapter_path)
-    
-    # 2. Trigger the browser download
-    files.download("best_model.zip")
+# # Final Status
+# Final evaluation completed. Best model adapter is persisted locally and uploaded as a WandB artifact.
