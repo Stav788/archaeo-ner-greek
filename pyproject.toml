@@ -55,20 +55,12 @@ dependencies = [
     "pyarrow>=23.0.1",
     "datasets>=4.8.4",
     "jupytext>=1.19.1",
-    "torch==2.11.0+cu130 ; sys_platform == 'linux'",
-    "torchvision==0.26.0+cu130 ; sys_platform == 'linux'",
-    "torchaudio==2.11.0+cu130 ; sys_platform == 'linux'",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "torchaudio>=2.0.0",
+    "wandb>=0.26.1",
+    "weave>=0.52.38",
 ]
-
-[[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
-explicit = true
-
-[tool.uv.sources]
-torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
-torchvision = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
-torchaudio = [{ index = "pytorch-cu130", marker = "sys_platform == 'linux'" }]
 
 [tool.setuptools]
 packages = ["archaeo_ner_greek"]
