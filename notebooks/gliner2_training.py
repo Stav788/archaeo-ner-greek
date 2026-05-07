@@ -45,7 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.2.2")
+    print("Pipeline Version: 1.2.3")
     try:
         from google.colab import userdata
         GITHUB_TOKEN = userdata.get('GITHUB_TOKEN')
