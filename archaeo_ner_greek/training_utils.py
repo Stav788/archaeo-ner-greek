@@ -4,7 +4,6 @@ import subprocess
 import logging
 from pathlib import Path
 from collections import defaultdict
-from gliner2.training.data import InputExample
 
 # Verification Constants
 VERIFICATION_TARGET_IDS = [
@@ -20,7 +19,6 @@ VERIFICATION_PAIR_LABEL = "FEATURE"
 # Project Constants
 DEFAULT_ANNOTATOR = os.getenv("ANNOTATOR_A")
 
-
 logger = logging.getLogger(__name__)
 
 def setup_local():
@@ -31,7 +29,7 @@ def setup_local():
 
 def setup_colab():
     """Sets up Google Colab environment: installs deps, clones repo, and loads secrets."""
-    logger.info("Pipeline Version: 1.2.3")
+    logger.info("Pipeline Version: 1.2.4")
     logger.info(">>> Environment: Google Colab")
     from google.colab import userdata
     
@@ -54,11 +52,9 @@ def setup_colab():
 
     # 2. Use uv to install the project and all dependencies into the system environment
     logger.info("Installing project dependencies via uv...")
-    # Add --break-system-packages if needed, but on Colab --system is usually enough
     subprocess.check_call(["uv", "pip", "install", "--system", "-e", "."])
     
     # 3. Explicitly double-check critical missing libraries using the active interpreter's pip
-    # This acts as a fallback for Colab's specific environment quirks.
     logger.info("Verifying critical libraries (mammoth, markdownify)...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "mammoth", "markdownify", "wtpsplit"])
     
@@ -90,6 +86,7 @@ def setup_colab():
 
 def df_to_gliner_examples(df, entity_descriptions):
     """Converts a DataFrame of annotations into a list of GLiNER2 InputExample objects."""
+    from gliner2.training.data import InputExample
     examples = []
     for _, row in df.iterrows():
         text = row['sentence_field']
