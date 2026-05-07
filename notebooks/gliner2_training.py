@@ -54,7 +54,7 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
 import subprocess
-from training_utils import (
+from archaeo_ner_greek.training_utils import (
     setup_local, setup_colab, df_to_gliner_examples, verify_annotations, 
     plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, 
     plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, 
@@ -275,7 +275,7 @@ split_manifest = {
 with open(output_dir / "split_manifest.json", "w") as f:
     json.dump(split_manifest, f, indent=4)
 logger.info(f"Split Manifest saved to {output_dir}/split_manifest.json")
-num_epochs = 3
+num_epochs = 20
 
 
 training_config = TrainingConfig(
@@ -524,5 +524,38 @@ show_error_analysis(best_model, test_data_formatted, entity_descriptions, thresh
 
 
 # %% [markdown]
-# # Final Status
 # Final evaluation completed. Best model adapter is persisted locally and uploaded as a WandB artifact.
+
+# %% [markdown]
+# # Usage & Documentation Guide
+#
+# This pipeline is designed for both local execution and cloud-based experimentation via Colab.
+#
+# ### 1. Local Environment Configuration
+# To maintain a stable and reproducible environment, we use `uv` package manager.
+# *   **Synchronization**: Ensure all dependencies and the local package are installed by running `uv sync` in the root directory.
+# *   **Notebook Serialization**: If you are working directly with the `.py` source, you can regenerate the interactive notebook using Jupytext:
+#     ```bash
+#     uv run jupytext --to ipynb notebooks/gliner2_training.py
+#     ```
+# *   **Execution**: The script can be executed via VS Code, Antigravity, or any Jupyter-compatible IDE. Ensure the `.venv` kernel is selected.
+#
+# ### 2. Colab Integration
+# The script features automatic environment detection and will trigger `setup_colab()` when running in the cloud.
+# *   **Secrets Management**: Before execution, populate the following keys in the Colab "Secrets" sidebar:
+#     *   `GITHUB_TOKEN`: Required for cloning the private repository.
+#     *   `ARGILLA_API_URL` & `ARGILLA_API_KEY`: For corpus acquisition.
+#     *   `ARGILLA_WORKSPACE`, `ARGILLA_DATASET`, `ARGILLA_TEST_DATASET`.
+#     *   `ANNOTATOR_A`: Specifically identifies the annotator for data filtering.
+#     *   `WANDB_API_KEY`: Enables remote experiment tracking.
+# *   **Hardware Selection**: For fine-tuning performance, select a GPU or TPU runtime.
+#
+# ### 3. Experiment Tracking (Weights & Biases)
+# This project leverages WandB for real-time experiment tracking and artifact persistence.
+# *   **Metrics**: Training loss, validation metrics, and convergence curves are synchronized automatically.
+# *   **Artifact Persistence**: The optimized LoRA adapter is uploaded as a versioned artifact at the conclusion of the run. This provides a cloud-based backup and ensures the best model state is never lost.
+# *   **Comparative Baseline**: The dashboard includes both zero-shot and fine-tuned results to facilitate objective performance analysis.
+#
+# ### 4. Reproducibility & Artifacts
+# *   **Local Storage**: Check the `data/models/{experiment_name}` directory for the best-performing adapter and local manifests.
+# *   **Split Integrity (Leakage Prevention)**: The `split_manifest.json` preserves the exact document-grouped partitions used during the session. In archaeological texts, sentences from the same document often share localized terminology and context. Splitting a single document across partitions would cause "data leakage," leading to inflated, unrealistic performance metrics. Maintaining this manifest ensures that the evaluation is conducted on entirely "unseen" documents. This provides an audit trail ensuring the model's performance is based on learning rather than memorization on specific document.

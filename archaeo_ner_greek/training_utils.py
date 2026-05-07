@@ -3,6 +3,7 @@ import sys
 import subprocess
 import logging
 from pathlib import Path
+from collections import defaultdict
 from gliner2.training.data import InputExample
 
 # Verification Constants
@@ -15,6 +16,10 @@ VERIFICATION_TARGET_IDS = [
 VERIFICATION_TARGETS = ["αστρικό κόσμημα", "τριπτά εργαλεία"]
 VERIFICATION_PAIR_TEXT = "παραστάδες"
 VERIFICATION_PAIR_LABEL = "FEATURE"
+
+# Project Constants
+DEFAULT_ANNOTATOR = os.getenv("ANNOTATOR_A")
+
 
 logger = logging.getLogger(__name__)
 
@@ -127,12 +132,18 @@ def plot_training_history(results):
     
     # 1. Plot Loss
     plt.figure(figsize=(10, 5))
-    plt.plot([x['loss'] for x in results.history if 'loss' in x], label='Train Loss')
-    if any('eval_loss' in x for x in results.history):
-        plt.plot([x['eval_loss'] for x in results.history if 'eval_loss' in x], label='Val Loss')
-    plt.title("Training Progress (Loss)")
+    eval_hist = results.get('eval_metrics_history', [])
+    
+    # Eval Loss (usually what we have per epoch)
+    if any('eval_loss' in x for x in eval_hist):
+        plt.plot([x['eval_loss'] for x in eval_hist], label='Val Loss', marker='o')
+    
+    # Metrics
+    plt.plot([x['f1'] for x in eval_hist], label='Val F1', marker='s')
+    
+    plt.title("Evaluation Progress (per Epoch)")
     plt.xlabel("Epoch")
-    plt.ylabel("Loss")
+    plt.ylabel("Value")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.show()
@@ -172,8 +183,9 @@ def extract_doc_ids(df, id_column='document_sentence_id_field'):
 
 def grouped_split(df, group_col, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1, seed=42):
     """
-    Splits a DataFrame into three parts (train, val, test) ensuring that all 
-    rows with the same 'group_col' value stay in the same split.
+    Original simple document-grouped split.
+    Splits a DataFrame into three parts ensuring that all rows with the 
+    same 'group_col' stay in the same split.
     """
     import random
     unique_groups = list(df[group_col].unique())
@@ -193,6 +205,39 @@ def grouped_split(df, group_col, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1,
     df_test = df[df[group_col].isin(test_groups)].copy()
     
     return df_train, df_val, df_test
+
+def find_best_split_seeds(df, group_col, num_trials=100, top_n=5):
+    """
+    Tries multiple random seeds for grouped_split and returns the seeds 
+    that result in the most balanced sample distributions (closest to 80/10/10).
+    """
+    results = []
+    total_samples = len(df)
+    target_ratios = [0.8, 0.1, 0.1]
+    
+    for seed in range(num_trials):
+        df_train, df_val, df_test = grouped_split(df, group_col, seed=seed)
+        
+        # Calculate current ratios
+        current_ratios = [
+            len(df_train) / total_samples,
+            len(df_val) / total_samples,
+            len(df_test) / total_samples
+        ]
+        
+        # Calculate Mean Squared Error from targets
+        error = sum((a - b)**2 for a, b in zip(current_ratios, target_ratios))
+        
+        results.append({
+            "seed": seed,
+            "error": error,
+            "counts": [len(df_train), len(df_val), len(df_test)],
+            "ratios": current_ratios
+        })
+        
+    # Sort by lowest error
+    results.sort(key=lambda x: x["error"])
+    return results[:top_n]
 
 def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8):
     """
@@ -255,51 +300,75 @@ def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8
 
 def compute_metrics(model, dataset, threshold=0.8):
     """
-    Bulleted Micro-F1 calculation with local path-based schema loading.
+    Calculates Micro-F1 and Per-Label PRF metrics.
     """
     import sys
+    # Global counters
     tp, fp, fn = 0, 0, 0
+    
+    # Per-label counters
+    label_stats = defaultdict(lambda: {"tp": 0, "fp": 0, "fn": 0})
+    
     model.eval()
 
     for i, ex in enumerate(dataset):
-        logger.debug(ex)
-        # Inference
         text = ex[0]
-        gt_entities = ex[1]["entities"] # Ground truth entities
+        gt_entities = ex[1]["entities"]
         entity_descriptions = ex[1]["entity_descriptions"]
 
         output = model.extract_entities(text, entity_descriptions, threshold=threshold)
         pred_entities = output.get('entities', {})
         
-        # Flatten pred spans
-        pred_spans = []
-        for lbl, texts in pred_entities.items():
-            for t in texts:
-                pred_spans.append((t, lbl))
+        # Flatten pred spans: list of (text, label)
+        pred_spans = [(t, lbl) for lbl, texts in pred_entities.items() for t in texts]
+        # Flatten gt spans: list of (text, label)
+        gt_spans = [(t, lbl) for lbl, texts in gt_entities.items() for t in texts]
         
-        # Flatten gt spans
-        gt_spans = []
-        for lbl, texts in gt_entities.items():
-            for t in texts:
-                gt_spans.append((t, lbl))
-        
-        # Exact Match logic (order insensitive)
+        # 1. Calculate TPs and FPs
         temp_gt = gt_spans.copy()
         for p in pred_spans:
+            text_p, lbl_p = p
             if p in temp_gt:
                 tp += 1
+                label_stats[lbl_p]["tp"] += 1
                 temp_gt.remove(p)
             else:
                 fp += 1
-        fn += len(temp_gt)
+                label_stats[lbl_p]["fp"] += 1
+        
+        # 2. Calculate FNs (remaining in temp_gt)
+        for g in temp_gt:
+            text_g, lbl_g = g
+            fn += 1
+            label_stats[lbl_g]["fn"] += 1
 
+    # Aggregate Global Metrics
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0
     f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
     
-    metrics = {"f1": f1, "precision": precision, "recall": recall, "tp": tp, "fp": fp, "fn": fn}
-    formatted_metrics = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in metrics.items()}
-    logger.info(f"\n>>> EVAL: {formatted_metrics}")
+    # Aggregate Per-Label Metrics
+    per_label_metrics = {}
+    all_labels = set(list(label_stats.keys()) + list(dataset[0][1]["entities"].keys()))
+    
+    for lbl in all_labels:
+        s = label_stats[lbl]
+        l_p = s["tp"] / (s["tp"] + s["fp"]) if (s["tp"] + s["fp"]) > 0 else 0
+        l_r = s["tp"] / (s["tp"] + s["fn"]) if (s["tp"] + s["fn"]) > 0 else 0
+        l_f1 = 2 * (l_p * l_r) / (l_p + l_r) if (l_p + l_r) > 0 else 0
+        per_label_metrics[lbl] = {
+            "precision": l_p, "recall": l_r, "f1": l_f1, 
+            "tp": s["tp"], "fp": s["fp"], "fn": s["fn"]
+        }
+    
+    metrics = {
+        "f1": f1, "precision": precision, "recall": recall, 
+        "tp": tp, "fp": fp, "fn": fn,
+        "per_label_metrics": per_label_metrics
+    }
+    
+    # Log summary
+    logger.info(f"\n>>> EVAL Micro-F1: {f1:.4f} | Precision: {precision:.4f} | Recall: {recall:.4f}")
     sys.stdout.flush()
     
     return metrics
@@ -359,3 +428,123 @@ def show_error_analysis(model, dataset, entity_descriptions, threshold=0.8, num_
         if fp: print(f"  \033[91m[FPs]: {fp}\033[0m") # Red
         if fn: print(f"  \033[93m[FNs]: {fn}\033[0m") # Yellow
         print("-" * 50)
+
+def show_detailed_report(model, dataset, threshold=0.5):
+    """
+    Calculates per-category PRF metrics and displays a sortable table.
+    """
+    import pandas as pd
+    from training_utils import compute_metrics
+    
+    # 1. Get predictions (compute_metrics returns per_label_metrics by default in our utils)
+    results = compute_metrics(model, dataset, threshold=threshold)
+    
+    # Emoji Mapping
+    emojis = {
+        "ARTEFACT": "🏺",
+        "LOCATION": "🏛️",
+        "PERIOD": "⏳",
+        "CONTEXT": "📜",
+        "MATERIAL": "🧱",
+        "SPECIES": "🧬",
+        "PERSON": "👤",
+        "FEATURE": "🗺️"
+    }
+    
+    per_label = results.get('per_label_metrics', {})
+    
+    rows = []
+    for label, metrics in per_label.items():
+        emoji = emojis.get(label, "🏷️")
+        rows.append({
+            "Entity Type": f"{emoji} {label}",
+            "Precision": float(metrics['precision']),
+            "Recall": float(metrics['recall']),
+            "F1-Score": float(metrics['f1']),
+            "Support": int(metrics.get('tp', 0) + metrics.get('fn', 0))
+        })
+    
+    if not rows:
+        return "No entity predictions found for report."
+
+    # Sort by F1 descending by default
+    df = pd.DataFrame(rows).sort_values("F1-Score", ascending=False)
+    
+    # Add Micro Average Row
+    micro_row = pd.DataFrame([{
+        "Entity Type": "📊 OVERALL (Micro)",
+        "Precision": float(results['precision']),
+        "Recall": float(results['recall']),
+        "F1-Score": float(results['f1']),
+        "Support": sum(d['Support'] for d in rows)
+    }])
+    
+    df = pd.concat([df, micro_row], ignore_index=True)
+    
+    # Format for display
+    return df.style.format({
+        "Precision": "{:.3f}",
+        "Recall": "{:.3f}",
+        "F1-Score": "{:.3f}"
+    }).background_gradient(cmap='Blues', subset=['F1-Score'])
+
+def safe_wandb_log(metrics, project, experiment_name, config=None, prefix=""):
+    """
+    Logs metrics to WandB safely, ensuring a run is active.
+    """
+    try:
+        import wandb
+        if wandb.run is None:
+            # Handle dictionary vs TrainingConfig object
+            config_dict = config.__dict__ if hasattr(config, "__dict__") else config
+            wandb.init(project=project, name=experiment_name, config=config_dict, reinit="finish_previous")
+        
+        # Format metrics with prefix
+        log_dict = {f"{prefix}{k}": v for k, v in metrics.items() if isinstance(v, (int, float))}
+        if log_dict:
+            wandb.log(log_dict)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"WandB logging failed: {e}")
+
+def setup_wandb(enabled, project, experiment_name, config):
+    """
+    Initializes WandB if enabled and returns a pre-configured logging function 
+    to minimize code pollution in the main script.
+    """
+    if enabled:
+        try:
+            import wandb
+            config_dict = config.__dict__ if hasattr(config, "__dict__") else config
+            wandb.init(project=project, name=experiment_name, config=config_dict, reinit="finish_previous")
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"WandB initialization failed: {e}")
+
+    def log_fn(metrics, prefix=""):
+        if enabled:
+            safe_wandb_log(metrics, project, experiment_name, config, prefix)
+            
+    return log_fn
+
+def upload_wandb_artifact(enabled, adapter_path, experiment_name):
+    """Uploads the best LoRA adapter as a WandB artifact if enabled."""
+    if not enabled:
+        return
+    try:
+        import wandb
+        if wandb.run is None:
+            import logging
+            logging.getLogger(__name__).warning("No active WandB run found. Artifact upload skipped.")
+            return
+
+        artifact_name = f"adapter-{experiment_name}"
+        artifact = wandb.Artifact(name=artifact_name, type="model")
+        artifact.add_dir(str(adapter_path))
+        wandb.log_artifact(artifact)
+        
+        import logging
+        logging.getLogger(__name__).info(f"Adapter successfully uploaded to WandB: {artifact_name}")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"WandB artifact upload failed: {e}")
