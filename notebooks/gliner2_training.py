@@ -45,7 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.3.7")
+    print("Pipeline Version: 1.3.9")
     # Force upgrade critical dependencies
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
@@ -55,11 +55,18 @@ if IN_COLAB:
         REPO_NAME = "archaeo-ner-greek"
         if not os.path.exists(REPO_NAME):
             REPO_URL = f"https://{GITHUB_TOKEN}@github.com/Stav788/{REPO_NAME}.git"
-            subprocess.check_call(["git", "clone", "--branch", "dev", REPO_URL])
+            try:
+                subprocess.check_call(["git", "clone", "--branch", "dev", REPO_URL], 
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except:
+                print("Warning: Bootstrap clone failed. Verify GITHUB_TOKEN permissions.")
         
-        if os.path.abspath(REPO_NAME) not in sys.path:
-            sys.path.append(os.path.abspath(REPO_NAME))
-        os.chdir(REPO_NAME)
+        if os.path.exists(REPO_NAME):
+            if os.path.abspath(REPO_NAME) not in sys.path:
+                sys.path.append(os.path.abspath(REPO_NAME))
+            os.chdir(REPO_NAME)
+        else:
+            print("Warning: Repository folder missing. Using pre-installed modules if available.")
     except Exception as e:
         print(f"Colab bootstrap failed: {e}")
 

@@ -29,7 +29,7 @@ def setup_local():
 
 def setup_colab():
     """Sets up Google Colab environment: installs deps, clones repo, and loads secrets."""
-    logger.info("Pipeline Version: 1.3.7")
+    logger.info("Pipeline Version: 1.3.9")
     logger.info(">>> Environment: Google Colab")
     from google.colab import userdata
     
@@ -41,8 +41,11 @@ def setup_colab():
     REPO_URL = f"https://{GITHUB_TOKEN}@github.com/Stav788/{REPO_NAME}.git"
     
     if not os.path.exists(REPO_NAME):
-        logger.info(f"Cloning repository: {REPO_URL} into {REPO_NAME}")
-        subprocess.check_call(["git", "clone", "--branch", "dev", REPO_URL])
+        try:
+            subprocess.check_call(["git", "clone", "--branch", "dev", REPO_URL],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except:
+            logger.warning("Repository clone failed. Proceeding with existing files if available.")
     
     REPO_PATH = Path(os.getcwd()) / REPO_NAME
     if str(REPO_PATH) not in sys.path:
