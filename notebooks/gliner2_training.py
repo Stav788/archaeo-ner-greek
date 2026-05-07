@@ -45,7 +45,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.3.5")
+    print("Pipeline Version: 1.3.7")
     # Force upgrade critical dependencies
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
@@ -138,23 +138,32 @@ logger.info(f">>> Test dataset: {env_vars['ARGILLA_TEST_DATASET']}")
 
 # WandB Status for later logging
 logger.info(">>> SECRETS DIAGNOSTIC")
-CRITICAL_SECRETS = ["GITHUB_TOKEN", "ARGILLA_API_KEY", "WANDB_API_KEY", "ANNOTATOR_A"]
-missing_secrets = []
+MANDATORY_SECRETS = ["ARGILLA_API_KEY", "ARGILLA_DATASET", "ANNOTATOR_A"]
+OPTIONAL_SECRETS  = ["GITHUB_TOKEN", "WANDB_API_KEY"]
 
-for key in CRITICAL_SECRETS:
+missing_mandatory = []
+for key in MANDATORY_SECRETS:
     if not env_vars.get(key):
-        logger.error(f"FATAL: Secret '{key}' is MISSING.")
-        missing_secrets.append(key)
+        logger.error(f"FATAL: Mandatory secret '{key}' is MISSING.")
+        missing_mandatory.append(key)
     else:
         logger.info(f"Secret '{key}': FOUND")
 
-if missing_secrets:
-    logger.error(f"Cannot continue. Missing secrets: {missing_secrets}")
-    logger.info("Please add them in the Colab 'Secrets' tab and enable notebook access.")
-    raise ValueError(f"Missing mandatory secrets: {missing_secrets}")
+for key in OPTIONAL_SECRETS:
+    if not env_vars.get(key):
+        logger.warning(f"ADVISORY: Optional secret '{key}' is MISSING. (Continuing...)")
+    else:
+        logger.info(f"Secret '{key}': FOUND")
+
+if missing_mandatory:
+    logger.error(f"Cannot continue. Missing mandatory secrets: {missing_mandatory}")
+    raise ValueError(f"Missing mandatory secrets: {missing_mandatory}")
 
 wandb_enabled = WANDB_AVAILABLE and env_vars.get("WANDB_API_KEY") is not None
-logger.info("WandB is ENABLED.")
+if not wandb_enabled:
+    logger.warning("WandB is DISABLED (Missing key). Continuing without cloud logging.")
+else:
+    logger.info("WandB is ENABLED.")
 
 # %% [markdown]
 # ## Data Loading and Preprocessing
