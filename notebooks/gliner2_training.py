@@ -45,21 +45,37 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.3.9")
+    print("Pipeline Version: 1.4.0")
     # Force upgrade critical dependencies
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
         from google.colab import userdata
-        GITHUB_TOKEN = userdata.get('GITHUB_TOKEN')
+        def get_sec(k):
+            val = userdata.get(k)
+            return val.strip() if val else None
+            
+        GITHUB_TOKEN = get_sec('GITHUB_TOKEN')
         REPO_NAME = "archaeo-ner-greek"
+        
+        if GITHUB_TOKEN:
+            masked = f"{GITHUB_TOKEN[:4]}...{GITHUB_TOKEN[-4:]}"
+            print(f"GITHUB_TOKEN loaded (Length: {len(GITHUB_TOKEN)}, Masked: {masked})")
+        else:
+            print("GITHUB_TOKEN is MISSING in Colab Secrets.")
+
         if not os.path.exists(REPO_NAME):
             REPO_URL = f"https://{GITHUB_TOKEN}@github.com/Stav788/{REPO_NAME}.git"
             try:
-                subprocess.check_call(["git", "clone", "--branch", "dev", REPO_URL], 
-                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except:
-                print("Warning: Bootstrap clone failed. Verify GITHUB_TOKEN permissions.")
+                # Capture stderr to see the actual reason for failure
+                result = subprocess.run(["git", "clone", "--branch", "dev", REPO_URL], 
+                                      capture_output=True, text=True)
+                if result.returncode != 0:
+                    # Clean up the error message to hide the token before printing
+                    clean_err = result.stderr.replace(GITHUB_TOKEN, "********") if GITHUB_TOKEN else result.stderr
+                    print(f"Warning: Bootstrap clone failed.\nGit Error: {clean_err}")
+            except Exception as e:
+                print(f"Warning: Unexpected error during clone: {e}")
         
         if os.path.exists(REPO_NAME):
             if os.path.abspath(REPO_NAME) not in sys.path:
