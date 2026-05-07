@@ -71,6 +71,7 @@ def setup_colab():
     if wandb_key:
         try:
             import wandb
+            os.environ["WANDB_API_KEY"] = wandb_key
             wandb.login(key=wandb_key)
             logger.info("WandB: Logged in successfully.")
         except Exception as e:
@@ -515,7 +516,9 @@ def safe_wandb_log(metrics, project, experiment_name, config=None, prefix=""):
         if wandb.run is None:
             # Handle dictionary vs TrainingConfig object
             config_dict = config.__dict__ if hasattr(config, "__dict__") else config
-            wandb.init(project=project, name=experiment_name, config=config_dict, reinit="finish_previous")
+            run = wandb.init(project=project, name=experiment_name, config=config_dict, reinit="finish_previous")
+            import logging
+            logging.getLogger(__name__).info(f"WandB: New run initialized: {run.get_url()}")
         
         # Format metrics with prefix
         log_dict = {f"{prefix}{k}": v for k, v in metrics.items() if isinstance(v, (int, float))}
@@ -534,7 +537,9 @@ def setup_wandb(enabled, project, experiment_name, config):
         try:
             import wandb
             config_dict = config.__dict__ if hasattr(config, "__dict__") else config
-            wandb.init(project=project, name=experiment_name, config=config_dict, reinit="finish_previous")
+            run = wandb.init(project=project, name=experiment_name, config=config_dict, reinit="finish_previous")
+            import logging
+            logging.getLogger(__name__).info(f"WandB Initialized! View your run here: {run.get_url()}")
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"WandB initialization failed: {e}")
