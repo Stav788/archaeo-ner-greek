@@ -574,6 +574,9 @@ def get_dataset_as_dataframe(
                 # Filter by username if specified
                 if username:
                     if not target_user_response:
+                        # Log once per 100 records to avoid spamming
+                        if len(data) % 100 == 0:
+                            logger.debug(f"Row {r.id}: No response found for user '{username}'. Available: {[u['username'] for u in row['responses']]}")
                         continue
                     
                     row["response"] = target_user_response
@@ -585,7 +588,14 @@ def get_dataset_as_dataframe(
 
             
             data.append(row)
-        return pd.DataFrame(data)
+        
+        result_df = pd.DataFrame(data)
+        if username and not result_df.empty and 'labels' not in result_df.columns:
+            logger.error(f"FATAL: 'labels' column missing in DataFrame after filtering for user '{username}'.")
+            # Create an empty labels column to prevent KeyError downstream
+            result_df['labels'] = [[] for _ in range(len(result_df))]
+            
+        return result_df
     except Exception:
         logger.error("Failed to export dataset to DataFrame.", exc_info=True)
         return pd.DataFrame()
