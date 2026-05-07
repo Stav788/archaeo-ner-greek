@@ -34,10 +34,8 @@ def setup_colab():
     logger.info(">>> Environment: Google Colab")
     from google.colab import userdata
     
-    # Install dependencies
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q",
-                           "gliner2", "argilla", "tabulate", "python-dotenv",
-                           "matplotlib", "seaborn", "scikit-learn", "mammoth", "markdownify", "wtpsplit"])
+    # 1. Install uv
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
     GITHUB_TOKEN = userdata.get('GITHUB_TOKEN')
     REPO_NAME = "archaeo-ner-greek"
@@ -51,10 +49,11 @@ def setup_colab():
     if str(REPO_PATH) not in sys.path:
         sys.path.append(str(REPO_PATH))
     
-    if not REPO_PATH.is_dir():
-        raise FileNotFoundError(f"Repository directory not found at {REPO_PATH}")
-    
     os.chdir(str(REPO_PATH))
+
+    # 2. Use uv to install the project and all dependencies into the system environment
+    logger.info("Installing project dependencies via uv...")
+    subprocess.check_call(["uv", "pip", "install", "--system", "-e", "."])
 
     def get_secret(key):
         try: return userdata.get(key)
