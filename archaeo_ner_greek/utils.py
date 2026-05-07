@@ -487,11 +487,8 @@ def get_dataset_as_dataframe(
         workspace_name: Workspace name (required if dataset_name is a string and not unique).
         include_responses: If True, includes a column 'responses' with a list of dictionaries 
                            containing {'username': ..., 'values': ..., 'status': ...}.
-<<<<<<< HEAD
-=======
         username: Optional username to filter by. If provided, it automatically includes 
                   responses and only returns records where this user has a response.
->>>>>>> 7835b6d3f52ac4353ef6de9c406fa15a2388d6de
     """
     try:
         if isinstance(dataset_name, str):
