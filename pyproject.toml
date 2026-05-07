@@ -58,6 +58,7 @@ dependencies = [
     "torch>=2.0.0",
     "torchvision>=0.15.0",
     "torchaudio>=2.0.0",
+    "protobuf>=5.0.0",
     "wandb>=0.26.1",
     "weave>=0.52.38",
 ]
