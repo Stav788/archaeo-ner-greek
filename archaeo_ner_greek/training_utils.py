@@ -456,7 +456,7 @@ def show_detailed_report(model, dataset, threshold=0.5):
     Calculates per-category PRF metrics and displays a sortable table.
     """
     import pandas as pd
-    from training_utils import compute_metrics
+    from archaeo_ner_greek.training_utils import compute_metrics
     
     # 1. Get predictions (compute_metrics returns per_label_metrics by default in our utils)
     results = compute_metrics(model, dataset, threshold=threshold)
