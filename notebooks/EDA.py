@@ -87,6 +87,7 @@ plt.show()
 # Display Table
 print("--- Detailed Label Distribution ---")
 pivot_stats = df_stats.pivot(index='Label', columns='Split', values='Count').fillna(0).astype(int)
+pivot_stats['Total'] = pivot_stats.sum(axis=1)
 print(pivot_stats)
 
 # %% [markdown]
@@ -115,7 +116,14 @@ for name, df in splits.items():
     metrics_list.append(m)
 
 df_metrics = pd.DataFrame(metrics_list).set_index('Split')
-print("--- Per-Split Corpus Metrics ---")
+
+# Add 'Total' collection row
+total_df = pd.concat(splits.values())
+m_total = get_corpus_metrics(total_df)
+m_total_row = pd.DataFrame([m_total], index=['Total'])
+df_metrics = pd.concat([df_metrics, m_total_row])
+
+print("--- Corpus Metrics (Splits & Total) ---")
 print(df_metrics)
 
 # %% [markdown]
