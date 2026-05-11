@@ -178,44 +178,104 @@ plt.show()
 # Using spaCy's `displacy` to generate SVG renderings.
 
 # %%
-from spacy import displacy
+from PIL import Image, ImageDraw, ImageFont
 
-def save_displacy_svg(text, entities, filename):
+def save_ner_png(text, entities, filename):
     """
-    Renders NER entities using displacy and saves the output as an SVG file.
+    Renders NER entities using PIL and saves as PNG for thesis inclusion.
     """
     if entities is None or len(entities) == 0:
         print(f"No entities found for {filename}, skipping.")
         return
 
-    # Prepare data for displacy manual mode
-    # ents must be sorted by start position
-    formatted_ents = [
-        {"start": e['start'], "end": e['end'], "label": e['label']} 
-        for e in sorted(entities, key=lambda x: x['start'])
-    ]
-    
-    doc_data = {
-        "text": text,
-        "ents": formatted_ents,
-        "title": None
+    # Archaeological Color Palette (RGB)
+    COLORS = {
+        "ARTEFACT": (122, 236, 236),
+        "LOCATION": (255, 149, 97),
+        "PERIOD": (170, 156, 252),
+        "MATERIAL": (255, 235, 128),
+        "SIGHT": (156, 201, 204),
+        "PERSON": (228, 255, 135),
+        "ORGANIZATION": (255, 129, 151),
+        "SPECIES": (189, 147, 249),
+        "TXT": (40, 40, 40),
+        "BG": (255, 255, 255)
     }
+
+    font_size = 22
+    label_size = 14
     
-    # Render to SVG
-    # page=False returns just the SVG snippet
-    svg = displacy.render(doc_data, style="ent", manual=True, jupyter=False, page=True)
+    # Load fonts (Standard Linux paths)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+        label_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", label_size)
+    except:
+        font = ImageFont.load_default()
+        label_font = ImageFont.load_default()
+
+    # Create canvas
+    img_width, img_height = 2400, 250
+    img = Image.new("RGB", (img_width, img_height), color=COLORS["BG"])
+    draw = ImageDraw.Draw(img)
     
-    # Save to file
-    output_path = f"viz_{filename}.svg"
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(svg)
+    current_x, current_y = 40, 80
+    last_idx = 0
+    padding_h, padding_v = 8, 6
+    
+    # Process entities
+    for ent in sorted(entities, key=lambda x: x['start']):
+        start, end, label = ent['start'], ent['end'], ent['label']
+        
+        # 1. Plain text before
+        pre_text = text[last_idx:start]
+        if pre_text:
+            draw.text((current_x, current_y), pre_text, font=font, fill=COLORS["TXT"])
+            current_x += draw.textlength(pre_text, font=font)
+            
+        # 2. Entity box
+        ent_text = text[start:end]
+        ent_width = draw.textlength(ent_text, font=font)
+        label_text = f" {label}"
+        label_width = draw.textlength(label_text, font=label_font)
+        total_box_width = ent_width + label_width
+        
+        box_coords = [
+            current_x - padding_h, 
+            current_y - padding_v, 
+            current_x + total_box_width + padding_h, 
+            current_y + font_size + padding_v
+        ]
+        fill_color = COLORS.get(label, (220, 220, 220))
+        draw.rounded_rectangle(box_coords, radius=8, fill=fill_color)
+        
+        # Draw entity word
+        draw.text((current_x, current_y), ent_text, font=font, fill=COLORS["TXT"])
+        # Draw label
+        draw.text((current_x + ent_width + 4, current_y + 6), label, font=label_font, fill=COLORS["TXT"])
+        
+        current_x += total_box_width + (padding_h * 2) + 12
+        last_idx = end
+
+    # 3. Remaining text
+    post_text = text[last_idx:]
+    if post_text:
+        draw.text((current_x, current_y), post_text, font=font, fill=COLORS["TXT"])
+
+    # Crop
+    bbox = img.getbbox()
+    if bbox:
+        final_bbox = (0, 0, min(img_width, bbox[2] + 40), img_height)
+        img = img.crop(final_bbox)
+
+    output_path = f"viz_{filename}.png"
+    img.save(output_path)
     print(f"Saved visualization to {output_path}")
 
-# Example Export: Save the first record of each split
+# Example Export
 for name, df in splits.items():
     if len(df) > 0:
         example = df.iloc[0]
-        save_displacy_svg(example['input'], example['labels'], f"{name.lower()}_0")
+        save_ner_png(example['input'], example['labels'], f"{name.lower()}_0")
 
 # %%
 print("\nEDA for Archaeological NER metrics complete.")
