@@ -11,7 +11,7 @@ from typing import List, Dict, Literal, Optional, Set, Union, Any
 from pydantic import BaseModel
 from dotenv import load_dotenv, dotenv_values, find_dotenv
 from huggingface_hub import HfApi, login
-from wtpsplit import SaT
+from datasets import Dataset as HFDataset, DatasetDict, load_dataset, concatenate_datasets
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,8 @@ def connect_hugging_face(env_values: Optional[dict] = None):
     if env_values is None:
         env_values = load_credentials_from_env()
 
-    hf_token = env_values.get("HUGGING_FACE_HUB_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+    load_dotenv(override=True)
+    hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
     
     if not hf_token:
         logger.warning("HF Token not found in configuration.")
@@ -157,7 +158,7 @@ def get_argilla_client(env_vars: Optional[Union[dict, str]] = None, env_path: Op
     
     # 2. Load from environment if no dict provided
     if env_vars is None:
-        load_dotenv(dotenv_path=env_path)
+        load_dotenv(dotenv_path=env_path, override=True)
         env_vars = {
             "ARGILLA_API_URL": os.getenv("ARGILLA_API_URL"),
             "ARGILLA_API_KEY": os.getenv("ARGILLA_API_KEY")
@@ -469,6 +470,7 @@ def setup_ner_dataset(client: rg.Argilla, dataset_name: str, workspace_name: str
 
 # Alias for backward compatibility
 def setup_argilla_dataset(client: rg.Argilla, dataset_name: str, workspace_name: str, guidelines: str, min_submitted = 2):
+    load_dotenv(find_dotenv(), override=True)
     return setup_translation_dataset(client, dataset_name, workspace_name, guidelines, min_submitted)
 
 def get_dataset_as_dataframe(
@@ -706,6 +708,114 @@ def duplicate_dataset(
 
 # Alias for backward compatibility
 copy_dataset = duplicate_dataset
+
+def push_dataset_to_hub(
+    dataset: rg.Dataset,
+    repo_id: str,
+    token: Optional[str] = None,
+    private: bool = True,
+    subset: str = "default"
+) -> str:
+    """
+    Pushes an Argilla dataset to the Hugging Face Hub.
+    
+    Args:
+        dataset: The Argilla Dataset object.
+        repo_id: The HF repository ID (e.g., 'user/dataset').
+        token: Optional HF token.
+        private: Whether the repository should be private.
+        subset: The subset name in the HF dataset.
+        
+    Returns:
+        The URL of the pushed dataset.
+    """
+    try:
+        logger.info(f"Pushing dataset '{dataset.name}' to HF Hub: {repo_id} (subset: {subset})")
+        
+        # In Argilla v2, to_hub() pushes directly
+        dataset.to_hub(
+            repo_id=repo_id,
+            token=token,
+            private=private
+        )
+        
+        url = f"https://huggingface.co/datasets/{repo_id}"
+        logger.info(f"Successfully pushed dataset to: {url}")
+        return url
+    except Exception as e:
+        logger.error(f"Failed to push dataset to HF Hub: {e}", exc_info=True)
+        raise e
+
+def merge_datasets_in_memory(
+    client: rg.Argilla,
+    dataset_names: List[str],
+    workspace: str,
+    username: str = None
+) -> HFDataset:
+    """
+    Merges multiple Argilla datasets into a single Hugging Face Dataset object
+    in memory with smart deduplication (prioritizing bibliographic IDs over UUIDs).
+    Only includes annotations from the specified username (defaults to DEFAULT_ANNOTATOR).
+    """
+    import re
+    import unicodedata
+    from collections import defaultdict
+    from datasets import Dataset as HFDataset
+    from .training_utils import DEFAULT_ANNOTATOR
+    
+    target_user = username or DEFAULT_ANNOTATOR
+    logger.info(f"Merging datasets {dataset_names} for user: {target_user}")
+
+    def ultra_normalize(text):
+        if not text: return ""
+        text = unicodedata.normalize('NFKD', text)
+        text = "".join([c for c in text if not unicodedata.combining(c)])
+        return re.sub(r'[^a-zA-Z0-9\u0370-\u03ff]', '', text.lower())
+
+    def is_uuid(id_str):
+        return bool(re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', str(id_str)))
+
+    # Fetch and combine dataframes for each source dataset
+    all_dfs = []
+    for name in dataset_names:
+        logger.info(f"Fetching records from '{name}'...")
+        df = get_dataset_as_dataframe(client, name, workspace, username=target_user)
+        if not df.empty:
+            all_dfs.append(df)
+    
+    if not all_dfs:
+        logger.error(f"No records found for user '{target_user}' in datasets {dataset_names}")
+        return HFDataset.from_dict({})
+        
+    df_merged_raw = pd.concat(all_dfs, ignore_index=True)
+    total_raw_records = len(df_merged_raw)
+    
+    # Store records by normalized text for deduplication
+    seen_sentences = defaultdict(list)
+    for _, row in df_merged_raw.iterrows():
+        text = str(row.get("sentence_field", "")).strip()
+        norm_text = ultra_normalize(text)
+        seen_sentences[norm_text].append(row.to_dict())
+
+    # Resolve duplicates: Keep non-UUIDs over UUIDs
+    final_records = []
+    duplicates_removed = 0
+
+    for norm_text, occurrences in seen_sentences.items():
+        if len(occurrences) == 1:
+            final_records.append(occurrences[0])
+        else:
+            best_record = occurrences[0]
+            for rec in occurrences:
+                if not is_uuid(rec.get("id", "")):
+                    best_record = rec
+                    break
+            final_records.append(best_record)
+            duplicates_removed += (len(occurrences) - 1)
+
+    logger.info(f"Consolidation complete. Raw: {total_raw_records}, Clean: {len(final_records)} (Removed {duplicates_removed} duplicates).")
+    
+    return HFDataset.from_list(final_records)
 
 # --- Collaborative Annotation Utils ---
 
@@ -1456,6 +1566,8 @@ def highlight_diff_entities_html(text: str, spans_a: list, spans_b: list, name_a
         a_labels = tuple(sorted(char_states[i]['a']))
         b_labels = tuple(sorted(char_states[i]['b']))
         state = (a_labels, b_labels)
+        from wtpsplit import SaT
+        sat = SaT("2layer", hub_model="saatard/sat-greek")
         
         if state != current_state:
             if current_state is not None:

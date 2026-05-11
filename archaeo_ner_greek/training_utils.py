@@ -17,7 +17,7 @@ VERIFICATION_PAIR_TEXT = "παραστάδες"
 VERIFICATION_PAIR_LABEL = "FEATURE"
 
 # Project Constants
-DEFAULT_ANNOTATOR = os.getenv("ANNOTATOR_A")
+DEFAULT_ANNOTATOR = os.getenv("DEFAULT_ANNOTATOR")
 
 logger = logging.getLogger(__name__)
 
@@ -231,11 +231,30 @@ def grouped_split(df, group_col, train_ratio=0.8, val_ratio=0.1, test_ratio=0.1,
 def find_best_split_seeds(df, group_col, num_trials=100, top_n=5):
     """
     Tries multiple random seeds for grouped_split and returns the seeds 
-    that result in the most balanced sample distributions (closest to 80/10/10).
+    that result in:
+    1. Most complete label coverage (every label in every set)
+    2. Most balanced sample distributions (closest to 80/10/10)
     """
     results = []
     total_samples = len(df)
     target_ratios = [0.8, 0.1, 0.1]
+    
+    # 1. Get global label frequencies
+    label_counts = defaultdict(int)
+    for label_list in df['labels']:
+        if isinstance(label_list, list):
+            for entity in label_list:
+                label_counts[entity['label'] if isinstance(entity, dict) else str(entity)] += 1
+        elif isinstance(label_list, str):
+            label_counts[label_list] += 1
+            
+    all_unique_labels = set(label_counts.keys())
+    
+    # Identify the 2 least frequent labels
+    sorted_labels = sorted(label_counts.items(), key=lambda x: x[1])
+    rarest_labels = [l[0] for l in sorted_labels[:2]]
+    logger.info(f"Global label frequencies: {dict(label_counts)}")
+    logger.info(f"Tracking distribution for rarest labels: {rarest_labels}")
     
     for seed in range(num_trials):
         df_train, df_val, df_test = grouped_split(df, group_col, seed=seed)
@@ -247,18 +266,55 @@ def find_best_split_seeds(df, group_col, num_trials=100, top_n=5):
             len(df_test) / total_samples
         ]
         
+        # Check label coverage and distribution
+        def get_label_stats(frame):
+            s = set()
+            counts = defaultdict(int)
+            for ll in frame['labels']:
+                if isinstance(ll, list):
+                    for ent in ll:
+                        lbl = ent['label'] if isinstance(ent, dict) else str(ent)
+                        s.add(lbl)
+                        counts[lbl] += 1
+                elif isinstance(ll, str):
+                    s.add(ll)
+                    counts[ll] += 1
+            return s, counts
+            
+        labels_train, counts_train = get_label_stats(df_train)
+        labels_val, counts_val = get_label_stats(df_val)
+        labels_test, counts_test = get_label_stats(df_test)
+        
+        # How many global labels are missing from ANY of the three sets?
+        missing_train = all_unique_labels - labels_train
+        missing_val = all_unique_labels - labels_val
+        missing_test = all_unique_labels - labels_test
+        total_missing = len(missing_train) + len(missing_val) + len(missing_test)
+        
+        # Track distribution of rarest labels
+        rare_dist = {}
+        for rl in rarest_labels:
+            rare_dist[rl] = [counts_train[rl], counts_val[rl], counts_test[rl]]
+        
         # Calculate Mean Squared Error from targets
         error = sum((a - b)**2 for a, b in zip(current_ratios, target_ratios))
         
         results.append({
             "seed": seed,
             "error": error,
+            "total_missing": total_missing,
+            "missing_details": {
+                "train": list(missing_train),
+                "val": list(missing_val),
+                "test": list(missing_test)
+            },
+            "rarest_distribution": rare_dist,
             "counts": [len(df_train), len(df_val), len(df_test)],
             "ratios": current_ratios
         })
         
-    # Sort by lowest error
-    results.sort(key=lambda x: x["error"])
+    # Sort primarily by least missing labels, then by lowest ratio error
+    results.sort(key=lambda x: (x["total_missing"], x["error"]))
     return results[:top_n]
 
 def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8):
