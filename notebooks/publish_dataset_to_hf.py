@@ -25,11 +25,12 @@
 #
 # ## 2. Configuration
 #
-# Ensure your `.env` contains the following target repository information:
+# Add these variables to your local `.env` file if they do not already exist. 
+# By default, the dataset is **Public** and **Open** (self-registered).
 #
 # - `HF_REPO_ID`: The full identifier for your dataset (e.g., `your-username/archaeo-ner-greek`).
-# - `HF_REPO_PRIVATE`: Set to `True` for private hosting, `False` for public.
-# - `HF_REPO_GATED`: Set to `manual` to require approval for access, or `false` to disable gating.
+# - `HF_REPO_PRIVATE`: Set to `True` for private hosting (Defaults to `False`).
+# - `HF_REPO_GATED`: Set to `manual` to require approval for access (Defaults to `false`).
 # - `DEFAULT_ANNOTATOR`: Your specific Argilla username (the script will only publish your verified records).
 #
 # ## 3. Execution
@@ -128,8 +129,8 @@ try:
     repo_id = os.getenv("HF_REPO_ID")
     # Check both standard names for the token
     hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
-    hf_private = os.getenv("HF_REPO_PRIVATE", "True").lower() == "true"
-    hf_gated = os.getenv("HF_REPO_GATED", "manual").lower()
+    hf_private = os.getenv("HF_REPO_PRIVATE", "False").lower() == "true"
+    hf_gated = os.getenv("HF_REPO_GATED", "false").lower()
     hf_notification_email = os.getenv("HF_NOTIFICATION_EMAIL")
 except Exception as e:
     logger.error(f"Failed to connect to Hugging Face: {e}")
