@@ -161,25 +161,38 @@ if not dataset_name or not test_dataset_name:
 logger.info(f"Fetching and merging '{dataset_name}' and '{test_dataset_name}' in memory...")
 
 try:
-    # Perform the merge using HF datasets concatenation
-    merged_hf_ds = merge_datasets_in_memory(
+    # 1. Fetch records for the archival backup (Full - no user filtering)
+    logger.info("Fetching all records for archival subset (COMPLETE BACKUP)...")
+    merged_hf_ds_full = merge_datasets_in_memory(
         client=client,
         dataset_names=[dataset_name, test_dataset_name],
         workspace=workspace,
-        username=os.getenv("DEFAULT_ANNOTATOR")
+        username=None  # Preserve all annotators for IAA/Provenance
+    )
+
+    # 2. Fetch records for the training subset (Filtered by DEFAULT_ANNOTATOR)
+    default_annotator = os.getenv("DEFAULT_ANNOTATOR")
+    logger.info(f"Fetching records for training subset (User: {default_annotator})...")
+    merged_hf_ds_training = merge_datasets_in_memory(
+        client=client,
+        dataset_names=[dataset_name, test_dataset_name],
+        workspace=workspace,
+        username=default_annotator
     )
 except Exception as e:
     logger.error(f"Failed to merge datasets: {e}")
     sys.exit(1)
 
-logger.info(f"Consolidation complete. In-memory pool contains {len(merged_hf_ds)} records.")
+logger.info(f"Consolidation complete.")
+logger.info(f" - Archival pool: {len(merged_hf_ds_full)} records")
+logger.info(f" - Training pool: {len(merged_hf_ds_training)} records")
 
 # %%
 log_stage("STRATIFIED SPLITTING")
 from archaeo_ner_greek.training_utils import find_best_split_seeds, grouped_split, extract_doc_ids
 
-# 1. Convert merged dataset to a DataFrame for splitting
-df_all = merged_hf_ds.to_pandas()
+# 1. Convert training dataset to a DataFrame for splitting
+df_all = merged_hf_ds_training.to_pandas()
 df_all['doc_id'] = extract_doc_ids(df_all)
 
 # 2. Find best seed and split
@@ -239,11 +252,11 @@ features = Features({
     'output': {
         'entities': {lbl: Sequence(Value('string')) for lbl in all_labels}
     },
-    'labels': Sequence(Features({
+    'labels': [Features({
         'label': Value('string'),
         'start': Value('int64'),
         'end': Value('int64')
-    })),
+    })],
     'doc_id': Value('string')
 })
 
@@ -261,8 +274,8 @@ logger.info(f"Pushing dataset to Hugging Face Hub: {repo_id}...")
 
 try:
     # A) Push the Full "argilla" subset (COMPLETE BACKUP)
-    logger.info("Pushing 'argilla' subset (Full Backup with all columns)...")
-    merged_hf_ds.push_to_hub(
+    logger.info("Pushing 'argilla' subset (Full Backup with all annotators)...")
+    merged_hf_ds_full.push_to_hub(
         repo_id=repo_id,
         config_name="argilla",
         split="train",
@@ -337,12 +350,14 @@ try:
     logger.info(f"Pulled partitions: Train={len(pulled_partitions['train'])}, Val={len(pulled_partitions['validation'])}, Test={len(pulled_partitions['test'])}")
     
     # 3. Compare record counts
-    original_count = len(merged_hf_ds)
+    original_training_count = len(merged_hf_ds_training)
+    original_full_count = len(merged_hf_ds_full)
+    
     argilla_count = len(pulled_argilla)
     partitions_total = len(pulled_partitions['train']) + len(pulled_partitions['validation']) + len(pulled_partitions['test'])
     
-    if original_count == argilla_count == partitions_total:
-        logger.info(f"✅ SUCCESS: Record counts match exactly across all subsets ({original_count}).")
+    if original_full_count == argilla_count and original_training_count == partitions_total:
+        logger.info(f"✅ SUCCESS: Record counts match exactly (Full: {argilla_count}, Training: {partitions_total}).")
     else:
         logger.error(f"❌ FAILURE: Record count mismatch!")
         logger.error(f"   - Original in-memory: {original_count}")
@@ -351,13 +366,13 @@ try:
         sys.exit(1)
 
     # 4. Verify IDs (on the argilla subset)
-    if 'id' in merged_hf_ds.column_names and 'id' in pulled_argilla.column_names:
+    if 'id' in merged_hf_ds_full.column_names and 'id' in pulled_argilla.column_names:
         logger.info("Verifying individual record IDs in 'argilla' subset...")
-        orig_ids = sorted(merged_hf_ds['id'])
+        orig_ids = sorted(merged_hf_ds_full['id'])
         pulled_ids = sorted(pulled_argilla['id'])
         
         if orig_ids == pulled_ids:
-            logger.info(f"✅ SUCCESS: All {original_count} record IDs are identical.")
+            logger.info(f"✅ SUCCESS: All {original_full_count} record IDs are identical.")
         else:
             logger.error("❌ FAILURE: Record ID sets differ.")
             sys.exit(1)
