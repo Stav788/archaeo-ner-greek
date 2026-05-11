@@ -808,11 +808,25 @@ def merge_datasets_in_memory(
         if len(occurrences) == 1:
             final_records.append(occurrences[0])
         else:
+            # Merge responses from all occurrences
+            merged_responses_map = {}
             best_record = occurrences[0]
+            
             for rec in occurrences:
+                # Keep non-UUID as the primary record for metadata/fields
                 if not is_uuid(rec.get("id", "")):
                     best_record = rec
-                    break
+                
+                # Collect all responses
+                resps = rec.get("responses", [])
+                if isinstance(resps, list):
+                    for r in resps:
+                        u_id = r.get("user_id")
+                        if u_id not in merged_responses_map:
+                            merged_responses_map[u_id] = r
+            
+            # Update the best record with the merged responses
+            best_record["responses"] = list(merged_responses_map.values())
             final_records.append(best_record)
             duplicates_removed += (len(occurrences) - 1)
 
@@ -1043,7 +1057,7 @@ def extract_annotations(row):
     responses = row.get("responses")
     sentence = row.get("sentence_field", "")
     
-    if not isinstance(responses, list):
+    if not isinstance(responses, (list, pd.Series)) and str(type(responses)).find('ndarray') == -1:
         return []
         
     for resp in responses:
@@ -1070,9 +1084,9 @@ def extract_annotations(row):
         val = resp.get("values")
         
         # 3. Identify content type and MERGE (don't overwrite)
-        if isinstance(val, list):
-            # It's a list of spans
-            user_id_to_data[u_id]["entities"].extend(val)
+        if isinstance(val, (list, pd.Series)) or str(type(val)).find('ndarray') != -1:
+            # It's a list/array of spans
+            user_id_to_data[u_id]["entities"].extend(list(val))
         elif isinstance(val, str):
             # It's a text suggestion (e.g. "ok")
             user_id_to_data[u_id]["suggestion"] = val
@@ -1081,8 +1095,8 @@ def extract_annotations(row):
             if "entities" in val:
                 ent = val["entities"]
                 spans = ent.get("value", ent) if isinstance(ent, dict) else ent
-                if isinstance(spans, list):
-                    user_id_to_data[u_id]["entities"].extend(spans)
+                if isinstance(spans, (list, pd.Series)) or str(type(spans)).find('ndarray') != -1:
+                    user_id_to_data[u_id]["entities"].extend(list(spans))
             if "label_suggestion" in val:
                 sug = val["label_suggestion"]
                 sug_text = sug.get("value", sug) if isinstance(sug, dict) else sug

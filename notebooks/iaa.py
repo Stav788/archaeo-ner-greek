@@ -115,35 +115,60 @@ discrepancy_report = analyze_iaa_discrepancies(iaa_ready, annotators=[annotator_
 print(discrepancy_report)
 
 # %% [markdown]
-# ## 7. Visualizations
-# Comparing annotator behavior visually.
+# ## 7. Visualizations & Final Reporting
+# Ported from legacy notebook for comprehensive thesis metrics.
 
 # %%
-# 1. Label Distribution Comparison
-def plot_label_distribution(iaa_ready, annotator_a, annotator_b):
-    a_counts = {}
-    b_counts = {}
+# 1. Set display options for better inspection
+pd.set_option('display.max_colwidth', None)
+
+# 2. Comprehensive Visualization Dashboard
+def plot_iaa_dashboard(label_report, discrepancy_report, annotator_a, annotator_b):
+    # Set visual style
+    sns.set_theme(style="whitegrid")
+    plt.rcParams['font.family'] = 'DejaVu Sans'
     
-    for row in iaa_ready:
-        for ent in row["annotations"].get(annotator_a, []):
-            a_counts[ent[2]] = a_counts.get(ent[2], 0) + 1
-        for ent in row["annotations"].get(annotator_b, []):
-            b_counts[ent[2]] = b_counts.get(ent[2], 0) + 1
-            
-    dist_df = pd.DataFrame([
-        {"Label": k, "Count": v, "Annotator": annotator_a} for k, v in a_counts.items()
-    ] + [
-        {"Label": k, "Count": v, "Annotator": annotator_b} for k, v in b_counts.items()
-    ])
+    fig, axes = plt.subplots(3, 1, figsize=(10, 18))
     
-    plt.figure(figsize=(12, 6))
-    sns.barplot(data=dist_df, x="Label", y="Count", hue="Annotator")
-    plt.title("Entity Label Distribution by Annotator")
-    plt.xticks(rotation=45)
+    # --- Panel 1: Label F1-Scores ---
+    label_data_clean = label_report[label_report["Label"] != "OVERALL"].sort_values("F1-Score", ascending=False)
+    sns.barplot(data=label_data_clean, x="F1-Score", y="Label", ax=axes[0], palette="viridis")
+    axes[0].set_title("IAA F1-Score per Label", fontsize=14, fontweight='bold')
+    axes[0].set_xlim(0, 1)
+    
+    # --- Panel 2: Agreement vs Disagreement Volume ---
+    # Prepare data for grouped bar chart
+    col_a = f"Only in A ({annotator_a})"
+    col_b = f"Only in B ({annotator_b})"
+    label_counts = label_data_clean.melt(
+        id_vars="Label", 
+        value_vars=["Both", col_a, col_b], 
+        var_name="Category", 
+        value_name="Count"
+    )
+    sns.barplot(data=label_counts, x="Count", y="Label", hue="Category", ax=axes[1], palette="muted")
+    axes[1].set_title("Annotation Volume Breakdown (Agreement vs Omissions)", fontsize=14, fontweight='bold')
+    axes[1].legend(title="Source", bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    # --- Panel 3: Discrepancy Types Distribution ---
+    discrepancy_data = discrepancy_report.reset_index()
+    discrepancy_data.columns = ["Error Type", "Count"]
+    sns.barplot(data=discrepancy_data, x="Count", y="Error Type", ax=axes[2], palette="rocket")
+    axes[2].set_title("Distribution of Discrepancy Types", fontsize=14, fontweight='bold')
+    
     plt.tight_layout()
     plt.show()
 
+# 3. Execution
 if len(iaa_ready) > 0:
-    plot_label_distribution(iaa_ready, annotator_a, annotator_b)
+    plot_iaa_dashboard(label_report, discrepancy_report, annotator_a, annotator_b)
+    
+    print("\n--- FINAL TABLES ---")
+    print("\n[GLOBAL AGREEMENT]")
+    print(iaa_report.to_string(index=False))
+    print("\n[LABEL BREAKDOWN]")
+    print(label_report.to_string(index=False))
+    print("\n[DISCREPANCY SUMMARY]")
+    print(discrepancy_report)
 else:
     print("No data ready for visualization.")
