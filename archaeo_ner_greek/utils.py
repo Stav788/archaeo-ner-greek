@@ -763,8 +763,11 @@ def merge_datasets_in_memory(
     from datasets import Dataset as HFDataset
     from .training_utils import DEFAULT_ANNOTATOR
     
-    target_user = username or DEFAULT_ANNOTATOR
-    logger.info(f"Merging datasets {dataset_names} for user: {target_user}")
+    target_user = username 
+    if target_user:
+        logger.info(f"Merging datasets {dataset_names} for user: {target_user}")
+    else:
+        logger.info(f"Merging datasets {dataset_names} (Archival - ALL USERS)")
 
     def ultra_normalize(text):
         if not text: return ""
