@@ -782,7 +782,7 @@ def merge_datasets_in_memory(
     all_dfs = []
     for name in dataset_names:
         logger.info(f"Fetching records from '{name}'...")
-        df = get_dataset_as_dataframe(client, name, workspace, username=target_user)
+        df = get_dataset_as_dataframe(client, name, workspace, username=target_user, include_responses=True)
         if not df.empty:
             all_dfs.append(df)
     
