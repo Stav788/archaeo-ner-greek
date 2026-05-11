@@ -18,6 +18,7 @@ VERIFICATION_PAIR_LABEL = "FEATURE"
 
 # Project Constants
 DEFAULT_ANNOTATOR = os.getenv("DEFAULT_ANNOTATOR")
+HF_REPO_ID = os.getenv("HF_REPO_ID", "pprokopidis/archaeo-ner-greek")
 
 logger = logging.getLogger(__name__)
 
@@ -81,13 +82,10 @@ def setup_colab():
             logger.warning(f"WandB: Login failed: {e}")
 
     return {
-        "ARGILLA_API_URL": get_secret("ARGILLA_API_URL"),
-        "ARGILLA_API_KEY": get_secret("ARGILLA_API_KEY"),
-        "ARGILLA_WORKSPACE": get_secret("ARGILLA_WORKSPACE"),
-        "ARGILLA_DATASET": get_secret("ARGILLA_DATASET"),
-        "ARGILLA_TEST_DATASET": get_secret("ARGILLA_TEST_DATASET"),
-        "ANNOTATOR_A": get_secret("ANNOTATOR_A"),
-        "WANDB_API_KEY": wandb_key
+        "HF_TOKEN": get_secret("HF_TOKEN"),
+        "HF_REPO_ID": get_secret("HF_REPO_ID") or HF_REPO_ID,
+        "WANDB_API_KEY": wandb_key,
+        "GITHUB_TOKEN": GITHUB_TOKEN
     }
 
 def df_to_gliner_examples(df, entity_descriptions):
@@ -95,7 +93,10 @@ def df_to_gliner_examples(df, entity_descriptions):
     from gliner2.training.data import InputExample
     examples = []
     for _, row in df.iterrows():
-        text = row['sentence_field']
+        # Support both new HF schema ('input') and legacy Argilla schema ('sentence_field')
+        text = row.get('input') or row.get('sentence_field')
+        if text is None:
+            raise KeyError("DataFrame must contain either 'input' or 'sentence_field' column.")
         entities = {lbl: [] for lbl in entity_descriptions.keys()}
         labels = row.get('labels', [])
         for label_obj in labels:
@@ -113,10 +114,10 @@ def df_to_gliner_examples(df, entity_descriptions):
         ))
     return examples
 
-def verify_annotations(df, target_ids, targets, pair_text, pair_label, annotator):
+def verify_annotations(df, target_ids, targets, pair_text, pair_label):
     """Debug function to verify specific problematic samples or targets."""
     for _, row in df.iterrows():
-        text = row['sentence_field']
+        text = row.get('input') or row.get('sentence_field')
         labels = row.get('labels', [])
         record_id = str(row['id'])
         

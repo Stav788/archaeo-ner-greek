@@ -761,7 +761,6 @@ def merge_datasets_in_memory(
     import unicodedata
     from collections import defaultdict
     from datasets import Dataset as HFDataset
-    from .training_utils import DEFAULT_ANNOTATOR
     
     target_user = username 
     if target_user:

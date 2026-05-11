@@ -11,7 +11,6 @@ dependencies = [
     "bs4>=0.0.2",
     "celery>=5.5.3",
     "dotenv>=0.9.9",
-    "fasttext-numpy2>=0.10.4",
     "feedparser>=6.0.12",
     "flair>=0.15.1",
     "html2text>=2025.4.15",

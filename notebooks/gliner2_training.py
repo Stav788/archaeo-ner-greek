@@ -23,13 +23,9 @@
 # #### 1. Repository Access
 # * **`GITHUB_TOKEN`**: Required for cloning private source code.
 # * **Obtain**: [GitHub Settings](https://github.com/settings/tokens) > Developer Settings > Personal access tokens. Required scope: `repo` or `contents:read`.
-# #### 2. Argilla Integration
-# Retrievable from your Argilla instance profile page:
-# * **`ARGILLA_API_URL`**: Instance endpoint.
-# * **`ARGILLA_API_KEY`**: Personal API key.
-# * **`ARGILLA_WORKSPACE`**: Target workspace.
-# * **`ARGILLA_DATASET`**: Dataset name.
-# * **`DEFAULT_ANNOTATOR`**: Username associated with your annotations.
+# #### 2. Hugging Face Integration
+# * **`HF_TOKEN`**: Required for accessing the dataset.
+# * **Obtain**: [HF Settings](https://huggingface.co/settings/tokens).
 # #### 3. Activation
 # * Toggle **Notebook access** to **ON** for all listed secrets.
 
@@ -92,6 +88,7 @@ import logging
 import warnings
 import random
 from datetime import datetime
+from datasets import load_dataset
 from logging.config import dictConfig
 from pathlib import Path
 
@@ -103,13 +100,11 @@ except ImportError:
     WANDB_AVAILABLE = False
 
 from archaeo_ner_greek.training_utils import (
-    setup_local, setup_colab, df_to_gliner_examples, verify_annotations, 
-    plot_training_history, plot_threshold_curves, extract_doc_ids, grouped_split, 
+    setup_local, setup_colab, df_to_gliner_examples, 
+    plot_training_history, plot_threshold_curves, 
     plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, 
-    show_error_analysis, find_best_split_seeds, show_detailed_report,
-    safe_wandb_log, setup_wandb, upload_wandb_artifact,
-    DEFAULT_ANNOTATOR, VERIFICATION_TARGET_IDS, VERIFICATION_TARGETS, 
-    VERIFICATION_PAIR_TEXT, VERIFICATION_PAIR_LABEL
+    show_error_analysis, show_detailed_report,
+    safe_wandb_log, setup_wandb, upload_wandb_artifact
 )
 
 # 1. Environment Detection & Pre-Import Setup
@@ -132,10 +127,6 @@ from sklearn.metrics import confusion_matrix
 # Local project imports
 import archaeo_ner_greek
 from archaeo_ner_greek.logging_config import setup_logging
-from archaeo_ner_greek.utils import (
-    configure_argilla_client,
-    get_dataset_as_dataframe,
-)
 
 # 3. Path Management
 BASE_DIR = Path(os.getcwd())
@@ -156,12 +147,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="wandb")
 
 logger.info(f">>> Working Directory: {BASE_DIR}")
 logger.info(f">>> Models Directory:  {MODELS_DIR}")
-logger.info(f">>> Dataset:  {env_vars['ARGILLA_DATASET']}")
-logger.info(f">>> Test dataset: {env_vars['ARGILLA_TEST_DATASET']}")
+logger.info(f">>> Dataset Repo:      {env_vars.get('HF_REPO_ID', 'pprokopidis/archaeo-ner-greek')}")
 
 # WandB Status for later logging
 logger.info(">>> SECRETS DIAGNOSTIC")
-MANDATORY_SECRETS = ["ARGILLA_API_KEY", "ARGILLA_DATASET", "DEFAULT_ANNOTATOR"]
+MANDATORY_SECRETS = ["HF_TOKEN"]
 OPTIONAL_SECRETS  = ["GITHUB_TOKEN", "WANDB_API_KEY"]
 
 missing_mandatory = []
@@ -188,70 +178,29 @@ if not wandb_enabled:
 else:
     logger.info("WandB is ENABLED.")
 
+
 # %% [markdown]
-# ## Data Loading and Preprocessing
+# ## Data Loading from Hugging Face
 #
+# We fetch the `default` configuration partitions (Train/Val/Test) from the official HF repository.
+# These splits are already document-aware and stratified.
 
 # %%
-client = configure_argilla_client(env_vars=env_vars)
-workspace = env_vars.get("ARGILLA_WORKSPACE")
+repo_id = env_vars.get("HF_REPO_ID", "pprokopidis/archaeo-ner-greek")
+hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
 
-df_train = get_dataset_as_dataframe(
-    client=client,
-    dataset_name=env_vars.get("ARGILLA_DATASET"),
-    workspace_name=workspace, 
-    username=env_vars.get("DEFAULT_ANNOTATOR")
-)
+logger.info(f"Loading partitions from HF: {repo_id} (Subset: default)")
+ds = load_dataset(repo_id, name="default", token=hf_token)
 
-df_test = get_dataset_as_dataframe(
-    client=client,
-    dataset_name=env_vars.get("ARGILLA_TEST_DATASET"),
-    workspace_name=workspace, 
-    username=env_vars.get("DEFAULT_ANNOTATOR")
-)
+# Map splits to DataFrames for compatibility with downstream conversion
+df_train = ds["train"].to_pandas()
+df_val = ds["validation"].to_pandas()
+df_test = ds["test"].to_pandas()
 
-df_all = pd.concat([df_train, df_test], ignore_index=True)
-logger.info(f"Merged Data: {len(df_all)} samples (Train: {len(df_train)}, Test: {len(df_test)})")
-
-if df_all.empty:
-    logger.error("FATAL: The merged dataset is EMPTY. Verify that:")
-    logger.error(f"1. Your DEFAULT_ANNOTATOR ('{env_vars.get('DEFAULT_ANNOTATOR')}') has submitted responses in Argilla.")
-    logger.info(f"2. The dataset names '{env_vars.get('ARGILLA_DATASET')}' are correct.")
-    raise ValueError("Dataset is empty. Cannot continue training.")
-
-if 'labels' not in df_all.columns:
-    logger.error("FATAL: 'labels' column missing in dataset.")
-    raise KeyError("Missing 'labels' column. Ensure Argilla responses are correctly formatted.")
-logger.info(f"Columns: {df_all.columns.tolist()}")
-logger.info("Sample IDs (First 10):")
-logger.info(df_all['id'].head(10).tolist())
-logger.info("\nMetadata structure (if available):")
-if 'metadata' in df_all.columns:
-    logger.info(json.dumps(df_all['metadata'].iloc[0], indent=2))
-else:
-    logger.info("No 'metadata' column found.")
-
-# Data is already filtered by get_dataset_as_dataframe(username=DEFAULT_ANNOTATOR)
-logger.info(f"Using data for annotator: {DEFAULT_ANNOTATOR}")
-
-# Extract Parent Document IDs
-df_all['doc_id'] = extract_doc_ids(df_all)
-logger.info(f"Unique documents identified: {df_all['doc_id'].nunique()}")
-logger.info("\n>>> DOC_ID MAPPING SAMPLE")
-logger.info(df_all[['document_sentence_id_field', 'doc_id']].head(10))
-
-
-if not df_all.empty:
-    logger.info(f"Ready: {len(df_all)} samples loaded with 'labels' ready for training.")
-    logger.info(f"Available Columns: {df_all.columns.tolist()}")
-
-if not df_all.empty:
-    row = df_all.iloc[0]
-    logger.info(f"{'='*40} FULL ROW DEBUG {'='*40}")
-    logger.info(f"ID     : {row['id']}")
-    logger.info(f"Full Response Dict: {json.dumps(row['sentence_field'], indent=2, ensure_ascii=False)}")
-    logger.info(f"Labels (Extracted): {row['labels']}")
-    logger.debug(f"Full Response Dict: {json.dumps(row['response'], indent=2, ensure_ascii=False)}")
+logger.info(f"HF Partitions Loaded: Train={len(df_train)}, Val={len(df_val)}, Test={len(df_test)}")
+total_records = len(df_train) + len(df_val) + len(df_test)
+logger.info(f"Total Records: {total_records}")
+logger.info(f"Final Split Ratios: Train={len(df_train)/total_records:.1%}, Val={len(df_val)/total_records:.1%}, Test={len(df_test)/total_records:.1%}")
 
 # %% [markdown]
 # ### Semantic Schema & Entity Label Definitions 
@@ -260,7 +209,7 @@ if not df_all.empty:
 # Dynamically find the package resources folder
 PACKAGE_ROOT = Path(archaeo_ner_greek.__file__).parent
 RESOURCES_DIR = PACKAGE_ROOT / "resources"
-GUIDELINES_PATH = RESOURCES_DIR / "archaeoner_labels_definitions_v7_st.json"
+GUIDELINES_PATH = RESOURCES_DIR / "archaeoner_labels_definitions_v12_st.json"
 logger.info(f"Loading entity descriptions from {GUIDELINES_PATH}")
 with open(GUIDELINES_PATH, 'r', encoding='utf-8') as f:
     entity_descriptions = json.load(f)
@@ -268,39 +217,6 @@ with open(GUIDELINES_PATH, 'r', encoding='utf-8') as f:
 logger.info(f"Labels: {list(entity_descriptions.keys())}")
 logger.info(f"Example: ARTEFACT: {entity_descriptions['ARTEFACT']}")
 
-# %%
-verify_annotations(
-    df_all, 
-    VERIFICATION_TARGET_IDS, 
-    VERIFICATION_TARGETS, 
-    VERIFICATION_PAIR_TEXT, 
-    VERIFICATION_PAIR_LABEL, 
-    DEFAULT_ANNOTATOR
-)
-
-# %% [markdown]
-# ### Document-Aware Stratified Partitioning (80/10/10)
-
-# %%
-# Find the most balanced split across 100 random seeds
-logger.info("Searching for the most balanced document split (Best-of-100)...")
-best_seeds = find_best_split_seeds(df_all, group_col='doc_id', num_trials=100, top_n=5)
-
-# Log the top candidates for transparency
-for i, candidate in enumerate(best_seeds):
-    counts = candidate['counts']
-    logger.info(f"Top {i+1}: Seed {candidate['seed']} | Missing={candidate['total_missing']} | Error={candidate['error']:.6f} | Counts: T={counts[0]}, V={counts[1]}, Te={counts[2]}")
-    # Log rare label distribution
-    dist_str = " | ".join([f"{lbl}: {d[0]}/{d[1]}/{d[2]}" for lbl, d in candidate['rarest_distribution'].items()])
-    logger.info(f"      -> Rare Dist (T/V/Te): {dist_str}")
-
-# Select the absolute best seed
-BEST_SEED = best_seeds[0]['seed']
-logger.info(f"Selecting BEST_SEED={BEST_SEED} for this experiment.")
-
-# Create the final grouped splits
-df_train, df_val, df_test = grouped_split(df_all, group_col='doc_id', seed=BEST_SEED)
-logger.info(f"Final Split Ratios: Train={len(df_train)/len(df_all):.1%}, Val={len(df_val)/len(df_all):.1%}, Test={len(df_test)/len(df_all):.1%}")
 
 # %% [markdown]
 # ### Dataset Serialization for GLiNER2
@@ -342,21 +258,6 @@ experiment_name = f"gliner2_archaeo_lora_{datetime.now().strftime('%Y%m%d_%H%M')
 output_dir = DATA_DIR / "models" / experiment_name
 output_dir.mkdir(parents=True, exist_ok=True)
 
-# Save Split Manifest for reproducibility
-split_manifest = {
-    "train": sorted(df_train['doc_id'].unique().tolist()),
-    "val": sorted(df_val['doc_id'].unique().tolist()),
-    "test": sorted(df_test['doc_id'].unique().tolist()),
-    "stats": {
-        "train_samples": len(df_train),
-        "val_samples": len(df_val),
-        "test_samples": len(df_test)
-    },
-    "seed": BEST_SEED
-}
-with open(output_dir / "split_manifest.json", "w") as f:
-    json.dump(split_manifest, f, indent=4)
-logger.info(f"Split Manifest saved to {output_dir}/split_manifest.json")
 num_epochs = 20
 
 
@@ -626,9 +527,8 @@ show_error_analysis(best_model, test_data_formatted, entity_descriptions, thresh
 # The script features automatic environment detection and will trigger `setup_colab()` when running in the cloud.
 # *   **Secrets Management**: Before execution, populate the following keys in the Colab "Secrets" sidebar:
 #     *   `GITHUB_TOKEN`: Required for cloning the private repository.
-#     *   `ARGILLA_API_URL` & `ARGILLA_API_KEY`: For corpus acquisition.
-#     *   `ARGILLA_WORKSPACE`, `ARGILLA_DATASET`, `ARGILLA_TEST_DATASET`.
-#     *   `ANNOTATOR_A`: Specifically identifies the annotator for data filtering.
+#     *   `HF_TOKEN`: Required for dataset access.
+#     *   `HF_REPO_ID`: (Optional) Target dataset repository.
 #     *   `WANDB_API_KEY`: Enables remote experiment tracking.
 # *   **Hardware Selection**: For fine-tuning performance, select a GPU or TPU runtime.
 #
