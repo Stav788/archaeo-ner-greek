@@ -261,8 +261,13 @@ def save_ner_png(text, entities, filename):
     if post_text:
         draw.text((current_x, current_y), post_text, font=font, fill=COLORS["TXT"])
 
-    # Crop to content
-    bbox = img.getbbox()
+    # Crop to content (handle white background)
+    from PIL import ImageOps
+    
+    # Invert to find non-white bounds
+    inverted = ImageOps.invert(img)
+    bbox = inverted.getbbox()
+    
     if bbox:
         # Add padding to the content bounding box
         final_bbox = (
