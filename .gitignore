@@ -179,3 +179,4 @@ wandb/
 .agents/
 scratch/
 .agents/
+notebooks/*.svg
