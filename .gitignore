@@ -180,3 +180,4 @@ wandb/
 scratch/
 .agents/
 notebooks/*.svg
+notebooks/*.png
