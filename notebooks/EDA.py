@@ -202,8 +202,8 @@ def save_ner_png(text, entities, filename):
         "BG": (255, 255, 255)
     }
 
-    font_size = 22
-    label_size = 14
+    font_size = 32
+    label_size = 20
     
     # Load fonts (Standard Linux paths)
     try:
@@ -214,13 +214,13 @@ def save_ner_png(text, entities, filename):
         label_font = ImageFont.load_default()
 
     # Create canvas
-    img_width, img_height = 2400, 250
+    img_width, img_height = 4000, 400
     img = Image.new("RGB", (img_width, img_height), color=COLORS["BG"])
     draw = ImageDraw.Draw(img)
     
-    current_x, current_y = 40, 80
+    current_x, current_y = 50, 100
     last_idx = 0
-    padding_h, padding_v = 8, 6
+    padding_h, padding_v = 12, 10
     
     # Process entities
     for ent in sorted(entities, key=lambda x: x['start']):
@@ -246,14 +246,14 @@ def save_ner_png(text, entities, filename):
             current_y + font_size + padding_v
         ]
         fill_color = COLORS.get(label, (220, 220, 220))
-        draw.rounded_rectangle(box_coords, radius=8, fill=fill_color)
+        draw.rounded_rectangle(box_coords, radius=10, fill=fill_color)
         
         # Draw entity word
         draw.text((current_x, current_y), ent_text, font=font, fill=COLORS["TXT"])
         # Draw label
-        draw.text((current_x + ent_width + 4, current_y + 6), label, font=label_font, fill=COLORS["TXT"])
+        draw.text((current_x + ent_width + 6, current_y + 10), label, font=label_font, fill=COLORS["TXT"])
         
-        current_x += total_box_width + (padding_h * 2) + 12
+        current_x += total_box_width + (padding_h * 2) + 15
         last_idx = end
 
     # 3. Remaining text
@@ -261,10 +261,16 @@ def save_ner_png(text, entities, filename):
     if post_text:
         draw.text((current_x, current_y), post_text, font=font, fill=COLORS["TXT"])
 
-    # Crop
+    # Crop to content
     bbox = img.getbbox()
     if bbox:
-        final_bbox = (0, 0, min(img_width, bbox[2] + 40), img_height)
+        # Add padding to the content bounding box
+        final_bbox = (
+            max(0, bbox[0] - 20), 
+            max(0, bbox[1] - 20), 
+            min(img_width, bbox[2] + 20), 
+            min(img_height, bbox[3] + 20)
+        )
         img = img.crop(final_bbox)
 
     output_path = f"viz_{filename}.png"
