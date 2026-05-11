@@ -29,7 +29,7 @@
 # * **`ARGILLA_API_KEY`**: Personal API key.
 # * **`ARGILLA_WORKSPACE`**: Target workspace.
 # * **`ARGILLA_DATASET`**: Dataset name.
-# * **`ANNOTATOR_A`**: Username associated with your annotations.
+# * **`DEFAULT_ANNOTATOR`**: Username associated with your annotations.
 # #### 3. Activation
 # * Toggle **Notebook access** to **ON** for all listed secrets.
 
@@ -161,7 +161,7 @@ logger.info(f">>> Test dataset: {env_vars['ARGILLA_TEST_DATASET']}")
 
 # WandB Status for later logging
 logger.info(">>> SECRETS DIAGNOSTIC")
-MANDATORY_SECRETS = ["ARGILLA_API_KEY", "ARGILLA_DATASET", "ANNOTATOR_A"]
+MANDATORY_SECRETS = ["ARGILLA_API_KEY", "ARGILLA_DATASET", "DEFAULT_ANNOTATOR"]
 OPTIONAL_SECRETS  = ["GITHUB_TOKEN", "WANDB_API_KEY"]
 
 missing_mandatory = []
@@ -200,14 +200,14 @@ df_train = get_dataset_as_dataframe(
     client=client,
     dataset_name=env_vars.get("ARGILLA_DATASET"),
     workspace_name=workspace, 
-    username=env_vars.get("ANNOTATOR_A")
+    username=env_vars.get("DEFAULT_ANNOTATOR")
 )
 
 df_test = get_dataset_as_dataframe(
     client=client,
     dataset_name=env_vars.get("ARGILLA_TEST_DATASET"),
     workspace_name=workspace, 
-    username=env_vars.get("ANNOTATOR_A")
+    username=env_vars.get("DEFAULT_ANNOTATOR")
 )
 
 df_all = pd.concat([df_train, df_test], ignore_index=True)
@@ -215,7 +215,7 @@ logger.info(f"Merged Data: {len(df_all)} samples (Train: {len(df_train)}, Test: 
 
 if df_all.empty:
     logger.error("FATAL: The merged dataset is EMPTY. Verify that:")
-    logger.error(f"1. Your ANNOTATOR_A ('{env_vars.get('ANNOTATOR_A')}') has submitted responses in Argilla.")
+    logger.error(f"1. Your DEFAULT_ANNOTATOR ('{env_vars.get('DEFAULT_ANNOTATOR')}') has submitted responses in Argilla.")
     logger.info(f"2. The dataset names '{env_vars.get('ARGILLA_DATASET')}' are correct.")
     raise ValueError("Dataset is empty. Cannot continue training.")
 
@@ -289,7 +289,10 @@ best_seeds = find_best_split_seeds(df_all, group_col='doc_id', num_trials=100, t
 # Log the top candidates for transparency
 for i, candidate in enumerate(best_seeds):
     counts = candidate['counts']
-    logger.info(f"Top {i+1}: Seed {candidate['seed']} | Split Counts: Train={counts[0]}, Val={counts[1]}, Test={counts[2]}")
+    logger.info(f"Top {i+1}: Seed {candidate['seed']} | Missing={candidate['total_missing']} | Error={candidate['error']:.6f} | Counts: T={counts[0]}, V={counts[1]}, Te={counts[2]}")
+    # Log rare label distribution
+    dist_str = " | ".join([f"{lbl}: {d[0]}/{d[1]}/{d[2]}" for lbl, d in candidate['rarest_distribution'].items()])
+    logger.info(f"      -> Rare Dist (T/V/Te): {dist_str}")
 
 # Select the absolute best seed
 BEST_SEED = best_seeds[0]['seed']

@@ -14,15 +14,9 @@
 # ---
 
 # %% [markdown]
-# # Exploratory Data Analysis (EDA) - Archaeological NER
+# # EDA - Archaeological NER
 #
-# This notebook provides a comprehensive analysis of the Archaeological NER dataset.
-#
-# **Key Requirements:**
-# 1. Use ONLY the Hugging Face `default` dataset subset.
-# 2. Detailed split-level metrics (Train/Val/Test).
-# 3. Semantic similarity analysis of splits via embeddings.
-# 4. XeLaTeX-compatible annotation export.
+# Analysis of the Archaeological NER dataset.
 
 # %%
 import os
@@ -173,7 +167,7 @@ plt.show()
 
 # %% [markdown]
 # ## 5. Entity Visualization Export
-# Using spaCy's `displacy` to generate high-quality SVG renderings for the thesis.
+# Using spaCy's `displacy` to generate SVG renderings.
 
 # %%
 from spacy import displacy
@@ -217,3 +211,25 @@ for name, df in splits.items():
 
 # %%
 print("\nEDA for Archaeological NER metrics complete.")
+
+# %% [markdown]
+# ## 6. Export to LaTeX
+# Generates thesis-ready tables if EXPORT_LATEX_TABLES is enabled.
+
+# %%
+if os.getenv("EXPORT_LATEX_TABLES", "False").lower() == "true":
+    from archaeo_ner_greek.utils import export_to_latex_table
+    
+    # 1. Entity Distribution
+    export_to_latex_table(
+        pivot_stats.reset_index(), 
+        caption="Entity label distribution per split.", 
+        label="tab:eda-entity-distribution"
+    )
+    
+    # 2. Corpus Metrics
+    export_to_latex_table(
+        df_metrics.reset_index(), 
+        caption="Corpus statistics and averages per split.", 
+        label="tab:eda-corpus-metrics"
+    )

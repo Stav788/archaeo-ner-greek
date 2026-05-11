@@ -14,10 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Inter-Annotator Agreement (IAA) Analysis
-#
-# This script calculates agreement metrics between annotators using data pulled 
-# exclusively from the Hugging Face `argilla` subset.
+# # IAA Analysis - Archaeological NER
 #
 # ## Metrics Calculated:
 # 1. **Pairwise Agreement**: Global sentence-level match % and Span F1-Score.
@@ -116,13 +113,12 @@ print(discrepancy_report)
 
 # %% [markdown]
 # ## 7. Visualizations & Final Reporting
-# Ported from legacy notebook for comprehensive thesis metrics.
 
 # %%
 # 1. Set display options for better inspection
 pd.set_option('display.max_colwidth', None)
 
-# 2. Comprehensive Visualization Dashboard
+# 2. Visualization Dashboard
 def plot_iaa_dashboard(label_report, discrepancy_report, annotator_a, annotator_b):
     # Set visual style
     sns.set_theme(style="whitegrid")
@@ -172,3 +168,32 @@ if len(iaa_ready) > 0:
     print(discrepancy_report)
 else:
     print("No data ready for visualization.")
+
+# %% [markdown]
+# ## 8. Export to LaTeX
+# Generates thesis-ready tables if EXPORT_LATEX_TABLES is enabled.
+
+# %%
+if os.getenv("EXPORT_LATEX_TABLES", "False").lower() == "true":
+    from archaeo_ner_greek.utils import export_to_latex_table
+    
+    # 1. Overall Results
+    export_to_latex_table(
+        iaa_report, 
+        caption="Overall IΑΑ results.", 
+        label="tab:iaa-overall"
+    )
+    
+    # 2. Label Breakdown
+    export_to_latex_table(
+        label_report, 
+        caption="IΑΑ results per entity label.", 
+        label="tab:iaa-label-breakdown"
+    )
+    
+    # 3. Discrepancy Summary
+    export_to_latex_table(
+        discrepancy_report.reset_index(), 
+        caption="Distribution of annotation discrepancy types.", 
+        label="tab:iaa-discrepancies"
+    )

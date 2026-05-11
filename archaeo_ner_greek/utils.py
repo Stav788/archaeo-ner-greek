@@ -1742,3 +1742,64 @@ def render_interactive_adjudication_tool(iaa_ready: list, discrepancies_only: pd
     display(ui)
     display(html_viewer)
     update_view(None)
+
+def export_to_latex_table(
+    df: pd.DataFrame, 
+    filename: Optional[str] = None, 
+    caption: str = "Table caption", 
+    label: str = "tab:label", 
+    position: str = "htbp", 
+    size: str = "small", 
+    column_format: Optional[str] = None
+):
+    """
+    Generates a full LaTeX table environment and prints it to stdout.
+    Optionally saves to filename if provided.
+    """
+    from tabulate import tabulate
+    
+    # 1. Prepare DataFrame for symbols
+    df_tex = df.copy()
+    symbol_placeholder = "PLACEHOLDER_LR_ARROW"
+    
+    def protect_symbols(val):
+        if isinstance(val, str):
+            return val.replace("↔", symbol_placeholder)
+        return val
+    
+    df_tex = df_tex.map(protect_symbols)
+    
+    # 2. Generate tabular body
+    tabular_body = tabulate(
+        df_tex, 
+        headers="keys", 
+        tablefmt="latex_booktabs", 
+        showindex=False
+    )
+    
+    # 3. Restore symbols and handle escapes
+    tabular_body = tabular_body.replace(symbol_placeholder, r"$\leftrightarrow$")
+    tabular_body = tabular_body.replace("%", r"\%")
+    
+    latex_content = [
+        f"\\begin{{table}}[{position}]",
+        "\\centering",
+        f"\\{size}",
+        tabular_body.strip(),
+        f"\\caption{{{caption}}}",
+        f"\\label{{{label}}}",
+        "\\end{table}"
+    ]
+    
+    full_latex = "\n".join(latex_content)
+    
+    # 4. Print to stdout (shows in notebook output)
+    print(f"\n--- LaTeX Table: {label} ---\n")
+    print(full_latex)
+    print("\n---------------------------\n")
+    
+    # 5. Write to file if filename is provided
+    if filename:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(full_latex)
+        print(f"Also saved to {filename}")
