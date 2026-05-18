@@ -62,8 +62,8 @@ def setup_colab():
     subprocess.check_call(["uv", "pip", "install", "--system", "-e", "."])
     
     # 3. Explicitly double-check critical missing libraries using the active interpreter's pip
-    logger.info("Verifying critical libraries (mammoth, markdownify, Pillow)...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "mammoth", "markdownify", "wtpsplit", "Pillow"])
+    logger.info("Verifying critical libraries (mammoth, markdownify)...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "mammoth", "markdownify", "wtpsplit"])
     
     # Force Python to re-scan for the newly installed packages
     import importlib

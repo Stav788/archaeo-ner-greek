@@ -42,8 +42,8 @@ import subprocess
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
     print("Pipeline Version: 1.4.0")
-    # Force upgrade critical dependencies
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "Pillow"])
+    # Install critical requirements
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
         from google.colab import userdata
@@ -147,7 +147,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="wandb")
 
 logger.info(f">>> Working Directory: {BASE_DIR}")
 logger.info(f">>> Models Directory:  {MODELS_DIR}")
-logger.info(f">>> Dataset Repo:      {env_vars.get('HF_REPO_ID', 'pprokopidis/archaeo-ner-greek')}")
+logger.info(f">>> Dataset Repo:      {env_vars.get('HF_REPO_ID', 'Stav788/archaeo-ner-greek')}")
 
 # WandB Status for later logging
 logger.info(">>> SECRETS DIAGNOSTIC")
