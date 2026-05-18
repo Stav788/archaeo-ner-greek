@@ -43,7 +43,7 @@ IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
     print("Pipeline Version: 1.4.0")
     # Force upgrade critical dependencies
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "Pillow"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
         from google.colab import userdata
@@ -501,9 +501,9 @@ plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, 
 # *   **"O" Column (Right)**: False Negatives (FN). The model completely missed a ground-truth entity.
 # *   **Off-Diagonal (Non-"O")**: Label Misclassification. The model found the correct text span but assigned the wrong category (e.g., predicted `CONTEXT` for an `ARTEFACT`).
 #
-
+#
 # Run error analysis using the optimized threshold
-show_error_analysis(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold, num_examples=50)
+# show_error_analysis(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold, num_examples=50)
 
 
 # %% [markdown]

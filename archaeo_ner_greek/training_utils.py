@@ -23,10 +23,13 @@ HF_REPO_ID = os.getenv("HF_REPO_ID", "pprokopidis/archaeo-ner-greek")
 logger = logging.getLogger(__name__)
 
 def setup_local():
-    """Sets up local environment: loads .env variables."""
-    from dotenv import dotenv_values, find_dotenv
+    """Sets up local environment: loads .env variables into os.environ."""
+    from dotenv import load_dotenv, dotenv_values, find_dotenv
     env_path = find_dotenv()
-    return dotenv_values(env_path) if env_path else {}
+    if env_path:
+        load_dotenv(env_path, override=True)
+        return dotenv_values(env_path)
+    return {}
 
 def setup_colab():
     """Sets up Google Colab environment: installs deps, clones repo, and loads secrets."""
@@ -59,8 +62,8 @@ def setup_colab():
     subprocess.check_call(["uv", "pip", "install", "--system", "-e", "."])
     
     # 3. Explicitly double-check critical missing libraries using the active interpreter's pip
-    logger.info("Verifying critical libraries (mammoth, markdownify)...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "mammoth", "markdownify", "wtpsplit"])
+    logger.info("Verifying critical libraries (mammoth, markdownify, Pillow)...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "mammoth", "markdownify", "wtpsplit", "Pillow"])
     
     # Force Python to re-scan for the newly installed packages
     import importlib
