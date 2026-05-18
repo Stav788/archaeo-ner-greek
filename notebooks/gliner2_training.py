@@ -41,7 +41,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("\n>>> Colab Pipeline Version: 1.5.1\n")
+    print("\n>>> Colab Pipeline Version: 1.5.2\n")
     # 1. Self-Healing check for corrupted PIL/Pillow
     try:
         from PIL import Image, ImageFont
@@ -49,13 +49,13 @@ if IN_COLAB:
     except ImportError:
         print("\n[Self-Healing] Mismatched/corrupted PIL installation detected. Force-reinstalling and restarting runtime...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "--force-reinstall", "-q", "-U", "Pillow"])
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "transformers", "huggingface_hub"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "transformers", "huggingface_hub==0.25.2"])
         print("\n[Self-Healing] Restarting active Python kernel to load clean Pillow files. Please wait 3 seconds...")
         import os
         os.kill(os.getpid(), 9)
 
     # 2. Install critical requirements if not already done
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "transformers", "huggingface_hub"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "transformers", "huggingface_hub==0.25.2"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
         from google.colab import userdata
