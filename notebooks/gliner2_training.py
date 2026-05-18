@@ -41,7 +41,8 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("Pipeline Version: 1.4.0")
+    # Clean up Colab disk corruption by force-reinstalling matching Pillow files
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--force-reinstall", "-q", "-U", "Pillow"])
     # Install critical requirements
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
