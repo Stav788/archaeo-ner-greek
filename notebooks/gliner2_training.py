@@ -41,6 +41,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
+    print("\n>>> Colab Pipeline Version: 1.5.0\n")
     # 1. Self-Healing check for corrupted PIL/Pillow
     try:
         from PIL import Image, ImageFont
@@ -99,6 +100,12 @@ if IN_COLAB:
             if os.path.abspath(REPO_NAME) not in sys.path:
                 sys.path.append(os.path.abspath(REPO_NAME))
             os.chdir(REPO_NAME)
+            # Print the current active commit
+            try:
+                commit_info = subprocess.check_output(["git", "log", "-1", "--format=%h - %s (%ci)"], text=True).strip()
+                print(f"\n>>> ACTIVE GIT COMMIT: {commit_info}\n")
+            except Exception as e:
+                print(f"Warning: Failed to retrieve active git commit info: {e}")
         else:
             print("Warning: Repository folder missing. Using pre-installed modules if available.")
     except Exception as e:
