@@ -66,13 +66,24 @@ if IN_COLAB:
             try:
                 # Capture stderr to see the actual reason for failure
                 result = subprocess.run(["git", "clone", "--branch", "dev", REPO_URL], 
-                                      capture_output=True, text=True)
+                                       capture_output=True, text=True)
                 if result.returncode != 0:
                     # Clean up the error message to hide the token before printing
                     clean_err = result.stderr.replace(GITHUB_TOKEN, "********") if GITHUB_TOKEN else result.stderr
                     print(f"Warning: Bootstrap clone failed.\nGit Error: {clean_err}")
             except Exception as e:
                 print(f"Warning: Unexpected error during clone: {e}")
+        else:
+            print("Repository already exists. Pulling latest changes from dev branch...")
+            try:
+                result = subprocess.run(["git", "-C", REPO_NAME, "pull"], capture_output=True, text=True)
+                if result.returncode != 0:
+                    clean_err = result.stderr.replace(GITHUB_TOKEN, "********") if GITHUB_TOKEN else result.stderr
+                    print(f"Warning: Bootstrap pull failed.\nGit Error: {clean_err}")
+                else:
+                    print("Successfully pulled latest changes!")
+            except Exception as e:
+                print(f"Warning: Unexpected error during pull: {e}")
         
         if os.path.exists(REPO_NAME):
             if os.path.abspath(REPO_NAME) not in sys.path:
