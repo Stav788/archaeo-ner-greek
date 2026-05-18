@@ -18,7 +18,7 @@ VERIFICATION_PAIR_LABEL = "FEATURE"
 
 # Project Constants
 DEFAULT_ANNOTATOR = os.getenv("DEFAULT_ANNOTATOR")
-HF_REPO_ID = os.getenv("HF_REPO_ID", "Stav788/archaeo-ner-greek")
+HF_REPO_ID = os.getenv("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
 
 logger = logging.getLogger(__name__)
 

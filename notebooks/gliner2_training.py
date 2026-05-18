@@ -170,7 +170,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="wandb")
 
 logger.info(f">>> Working Directory: {BASE_DIR}")
 logger.info(f">>> Models Directory:  {MODELS_DIR}")
-logger.info(f">>> Dataset Repo:      {env_vars.get('HF_REPO_ID', 'Stav788/archaeo-ner-greek')}")
+logger.info(f">>>> Dataset Repo:      {env_vars.get('HF_REPO_ID', 'Stalexan/archaeo-ner-greek')}")
 
 # WandB Status for later logging
 logger.info(">>> SECRETS DIAGNOSTIC")
@@ -209,7 +209,7 @@ else:
 # These splits are already document-aware and stratified.
 
 # %%
-repo_id = env_vars.get("HF_REPO_ID", "Stav788/archaeo-ner-greek")
+repo_id = env_vars.get("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
 hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
 
 logger.info(f"Loading partitions from HF: {repo_id} (Subset: default)")

@@ -35,7 +35,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 # %%
 load_dotenv(find_dotenv(), override=True)
-repo_id = os.getenv("HF_REPO_ID", "Stav788/archaeo-ner-greek")
+repo_id = os.getenv("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
 hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
 
 print(f"Loading partitions from: {repo_id}")
