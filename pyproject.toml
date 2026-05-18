@@ -63,6 +63,7 @@ dependencies = [
     "weave>=0.52.38",
     "typer>=0.25.0",
     "pillow>=12.2.0",
+    "openai>=2.37.0",
 ]
 
 [tool.setuptools]
