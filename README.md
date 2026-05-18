@@ -43,7 +43,7 @@ To access professional features and specialized AI models:
 1. Open a terminal and navigate to your projects folder.
 2. Clone the repository:
    ```bash
-   git clone https://github.com/prokopidis/archaeo-ner-greek.git
+   git clone https://github.com/Stav788/archaeo-ner-greek.git
    cd archaeo-ner-greek
    ```
 3. Initialize the environment:

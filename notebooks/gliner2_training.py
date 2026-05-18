@@ -209,7 +209,7 @@ else:
 # These splits are already document-aware and stratified.
 
 # %%
-repo_id = env_vars.get("HF_REPO_ID", "pprokopidis/archaeo-ner-greek")
+repo_id = env_vars.get("HF_REPO_ID", "Stav788/archaeo-ner-greek")
 hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
 
 logger.info(f"Loading partitions from HF: {repo_id} (Subset: default)")
