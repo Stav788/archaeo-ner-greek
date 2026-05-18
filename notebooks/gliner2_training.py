@@ -41,9 +41,19 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    # Clean up Colab disk corruption by force-reinstalling matching Pillow files
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--force-reinstall", "-q", "-U", "Pillow"])
-    # Install critical requirements
+    # 1. Self-Healing check for corrupted PIL/Pillow
+    try:
+        from PIL import Image, ImageFont
+        from PIL._typing import _Ink
+    except ImportError:
+        print("\n[Self-Healing] Mismatched/corrupted PIL installation detected. Force-reinstalling and restarting runtime...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--force-reinstall", "-q", "-U", "Pillow"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
+        print("\n[Self-Healing] Restarting active Python kernel to load clean Pillow files. Please wait 3 seconds...")
+        import os
+        os.kill(os.getpid(), 9)
+
+    # 2. Install critical requirements if not already done
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
