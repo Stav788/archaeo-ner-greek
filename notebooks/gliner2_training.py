@@ -100,12 +100,6 @@ if IN_COLAB:
             if os.path.abspath(REPO_NAME) not in sys.path:
                 sys.path.append(os.path.abspath(REPO_NAME))
             os.chdir(REPO_NAME)
-            # Print the current active commit
-            try:
-                commit_info = subprocess.check_output(["git", "log", "-1", "--format=%h - %s (%ci)"], text=True).strip()
-                print(f"\n>>> ACTIVE GIT COMMIT: {commit_info}\n")
-            except Exception as e:
-                print(f"Warning: Failed to retrieve active git commit info: {e}")
         else:
             print("Warning: Repository folder missing. Using pre-installed modules if available.")
     except Exception as e:
