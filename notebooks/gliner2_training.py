@@ -220,6 +220,24 @@ df_train = ds["train"].to_pandas()
 df_val = ds["validation"].to_pandas()
 df_test = ds["test"].to_pandas()
 
+# --- CONDITIONAL SYNTHETIC DATA AUGMENTATION ---
+use_synthetic = env_vars.get("USE_SYNTHETIC_DATA", "False").lower() in ("true", "1", "yes")
+synthetic_path = env_vars.get("SYNTHETIC_DATA_PATH", "")
+
+if use_synthetic and synthetic_path:
+    synth_file_path = Path(synthetic_path)
+    if synth_file_path.exists():
+        logger.info(f"🧬 Loading synthetic dataset for training from: {synth_file_path}")
+        df_synthetic = pd.read_json(synth_file_path)
+        
+        # Concatenate synthetic data directly to the training set
+        df_train = pd.concat([df_train, df_synthetic], ignore_index=True)
+        logger.info(f"🧬 Augmentation Successful: Added {len(df_synthetic)} synthetic samples to Train split.")
+    else:
+        logger.warning(f"⚠️ Synthetic data path does not exist: {synth_file_path}. Skipping augmentation.")
+else:
+    logger.info("🧬 Synthetic data augmentation is disabled or path is empty in configuration.")
+
 logger.info(f"HF Partitions Loaded: Train={len(df_train)}, Val={len(df_val)}, Test={len(df_test)}")
 total_records = len(df_train) + len(df_val) + len(df_test)
 logger.info(f"Total Records: {total_records}")
