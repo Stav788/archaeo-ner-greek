@@ -41,7 +41,7 @@ import subprocess
 # Clones the repo and sets paths BEFORE internal package imports.
 IN_COLAB = 'google.colab' in sys.modules
 if IN_COLAB:
-    print("\n>>> Colab Pipeline Version: 1.5.0\n")
+    print("\n>>> Colab Pipeline Version: 1.5.1\n")
     # 1. Self-Healing check for corrupted PIL/Pillow
     try:
         from PIL import Image, ImageFont
