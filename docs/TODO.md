@@ -86,13 +86,42 @@ Pairwise statistical significance test results using **Bootstrap Resampling** ($
 This table tracks hyperparameters, training datasets, and peak validation metrics achieved during active model training prior to post-training inference calibration:
 
 | Metric / Parameter | Standard Baseline (r=4) | Old 500-Synthetic (r=4) | New Curated 1:1 (r=4) | High-Capacity Baseline (r=16) |
-| :--- | :---: | :---: | :---: | :---: |
+| :--- | :--- | :---: | :---: | :---: |
 | **LoRA Rank ($r$)** | $4$ | $4$ | $4$ | **$16$** *(Capacity bump)* |
 | **LoRA Alpha ($\alpha$)** | $8$ | $8$ | $8$ | **$32$** |
 | **Dataset Size (Sentences)**| `260` (Human) | `260` (Human) + `500` (Synth) | `260` (Human) + `260` (Synth) | `260` (Human only) |
 | **Best Epoch** | Epoch 6 / 20 | Epoch 9 / 20 | Epoch 18 / 20 | Epoch 10 / 20 |
 | **Peak Dev F1** | `0.6434` | `0.5643` | `0.6406` | **`0.6517`** 🚀 *(New Peak)* |
-| **Peak Dev Precision** | **`0.7812`** | `0.5957` | `0.7360` | `0.7016` |
-| **Peak Dev Recall** | `0.5097` | `0.5833` | `0.5679` | **`0.6084`** 🚀 *(Recall breakthrough)* |
+| Peak Dev Precision | **`0.7812`** | `0.5957` | `0.7360` | `0.7016` |
+| Peak Dev Recall | `0.5097` | `0.5833` | `0.5679` | **`0.6084`** 🚀 *(Recall breakthrough)* |
 
+---
 
+## 📋 7. Assistant Handover Status & Context
+
+### 🏃‍♂️ Current Active Process (Background)
+*   **Task**: Fine-tuning GLiNER2 with $r=8$ / $\alpha=16$ configuration.
+*   **Screen Session**: `96324.archaeo-ner-greek-training`
+*   **Active Log File**: [tmp/training_20260519_0822.log](file:///home/prokopis/src/archaeo-ner-greek/tmp/training_20260519_0822.log)
+*   **W&B Live Dashboard**: [gliner2_archaeo_lora_20260519_0822 (rje0qby7)](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/rje0qby7)
+
+---
+
+### 💾 Step-by-Step Instructions for the Next Agent
+
+1.  **Monitor & Capture $r=8$ Results**:
+    *   Inspect `tmp/training_20260519_0822.log` or resume the screen session: `screen -r archaeo-ner-greek-training`.
+    *   Wait for the 20 epochs to finish. The script will automatically execute a post-training threshold sweep on the validation split and print the optimal calibrated threshold, and the corresponding Precision, Recall, F1, and raw counts (TP, FP, FN) on the isolated Gold Test Set.
+    *   Log these values into the **Part 4 (Benchmarks)** and **Part 6 (Hyperparameters)** tables in this document.
+
+2.  **Run Paired Statistical Significance Testing**:
+    *   Once the $r=8$ model checkpoint is saved under `data/models/gliner2_archaeo_lora_20260519_0822/best`, update `data/synthetic_data_generation/compute_significance.py` (which already contains $r=4$ and $r=16$ models) to include the path and threshold for the $r=8$ model.
+    *   Execute the script from the workspace root on CPU to avoid CUDA conflicts:
+        ```bash
+        python3 -u data/synthetic_data_generation/compute_significance.py
+        ```
+    *   Fill in all pending cells in **Part 5 (Significance)** table of this document using the newly printed pairwise bootstrap $p$-values ($B=10,000$).
+
+3.  **Perform Final Staging and Commit**:
+    *   Check for any leftover temporary files.
+    *   Stage and commit the completed `docs/TODO.md` and significance reports to the `dev` branch.
