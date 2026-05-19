@@ -120,6 +120,15 @@ def load_official_guidelines():
 
 GUIDELINES = load_official_guidelines()
 
+STRICTNESS_SUPPLEMENT = """
+CRITICAL STRICTION & EXCLUSION RULES (To match strict human annotations):
+1. **No Statue/Sculpture Body Parts**: Do NOT annotate individual anatomical body parts of statues, sculptures, or human figures (e.g., «πόδια», «πρόσωπο», «χέρι», «κνήμη», «κεφαλή», «κορμός» when referring to parts of a statue) as ARTEFACT. Only annotate the entire sculpture/statue as ARTEFACT.
+2. **No Generic Spaces or Modern Rooms**: Do NOT annotate generic spaces, modern rooms, or architectural areas (e.g., «βεράντα», «εξωτερικός χώρος», «αίθουσα», «εργαστήριο» when not referring to concrete ancient structures) as CONTEXT.
+3. **No Common/Generic Elements as FEATURES**: Do NOT annotate generic, common architectural features (e.g., simple walls like «τοίχος», generic rooms, or standard floors) as FEATURE unless they have a very specific, prominent archaeological or stylistic definition.
+4. **Boundary Strictness**: Be highly selective and conservative. Do not label words or phrases that human expert annotators would consider common terminology rather than formal archaeological named entities.
+"""
+
+
 # %% [markdown]
 # ## 2. Tokenizer & GLiNER Span Alignment functions
 
@@ -257,6 +266,8 @@ Your objective is to produce realistic Greek archaeological text passages that c
 Guidelines:
 {json.dumps(GUIDELINES, ensure_ascii=False, indent=2)}
 
+{STRICTNESS_SUPPLEMENT}
+
 Format Requirements:
 - Output MUST be structured in JSON containing a "samples" list.
 - Each sample must contain a "text" key (fluent Greek sentence) and an "entities" list.
@@ -312,6 +323,8 @@ Your objective is to produce realistic Greek archaeological text passages that c
 
 Guidelines:
 {json.dumps(GUIDELINES, ensure_ascii=False, indent=2)}
+
+{STRICTNESS_SUPPLEMENT}
 
 Format Requirements:
 - Output MUST be structured in JSON containing a "samples" list.
@@ -558,6 +571,8 @@ Your objective is to identify and annotate named entities in the provided raw Gr
 
 Guidelines:
 {json.dumps(GUIDELINES, ensure_ascii=False, indent=2)}
+
+{STRICTNESS_SUPPLEMENT}
 
 Format Requirements:
 - Output MUST be structured in JSON containing a "samples" list.
