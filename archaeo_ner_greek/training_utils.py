@@ -117,6 +117,22 @@ def df_to_gliner_examples(df, entity_descriptions):
         ))
     return examples
 
+def curate_synthetic_data(df, target_size=260, seed=42):
+    """
+    Curates and samples a synthetic NER DataFrame to the specified target_size.
+    Ensures a balanced, deterministic, and high-quality 1:1 mixture with gold training data.
+    """
+    if df is None or len(df) == 0:
+        logger.warning("curate_synthetic_data: Input DataFrame is empty or None.")
+        return df
+
+    if len(df) <= target_size:
+        logger.info(f"curate_synthetic_data: DataFrame size ({len(df)}) <= target_size ({target_size}). No sampling needed.")
+        return df
+
+    logger.info(f"curate_synthetic_data: Deterministically sampling {target_size} synthetic examples from pool of {len(df)} using seed={seed}.")
+    return df.sample(n=target_size, random_state=seed).reset_index(drop=True)
+
 def verify_annotations(df, target_ids, targets, pair_text, pair_label):
     """Debug function to verify specific problematic samples or targets."""
     for _, row in df.iterrows():

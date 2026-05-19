@@ -123,7 +123,7 @@ except ImportError:
     WANDB_AVAILABLE = False
 
 from archaeo_ner_greek.training_utils import (
-    setup_local, setup_colab, df_to_gliner_examples, 
+    setup_local, setup_colab, df_to_gliner_examples, curate_synthetic_data,
     plot_training_history, plot_threshold_curves, 
     plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, 
     show_error_analysis, show_detailed_report,
@@ -230,6 +230,10 @@ if use_synthetic and synthetic_path:
         logger.info(f"🧬 Loading synthetic dataset for training from: {synth_file_path}")
         df_synthetic = pd.read_json(synth_file_path)
         
+        # Curate and sample synthetic data to a target size (e.g. 260) to achieve balanced ratio
+        target_size = int(env_vars.get("GLINER_SYNTHETIC_SAMPLE_SIZE", 260))
+        df_synthetic = curate_synthetic_data(df_synthetic, target_size=target_size, seed=42)
+        
         # Concatenate synthetic data directly to the training set
         df_train = pd.concat([df_train, df_synthetic], ignore_index=True)
         logger.info(f"🧬 Augmentation Successful: Added {len(df_synthetic)} synthetic samples to Train split.")
@@ -313,10 +317,10 @@ training_config = TrainingConfig(
     gradient_accumulation_steps=4, # Simulates Effective Batch Size = 4
     fp16=True,                     # Half-precision for speed/memory
     
-    # LoRA Architecture (Rank 4 for stability on small datasets)
+    # LoRA Architecture
     use_lora=True,
-    lora_r=4,                     # Reduced from 16
-    lora_alpha=8.0,               # Reduced from 32.0 (standard 2*r)
+    lora_r=int(env_vars.get("GLINER_LORA_R", 4)),
+    lora_alpha=float(env_vars.get("GLINER_LORA_ALPHA", 8.0)),
     lora_dropout=0.1,             # Regularization for small datasets
     lora_target_modules=["encoder"], # Focused target
     save_adapter_only=True,        # Saves ~10-30MB instead of 1.2GB per checkpoint
