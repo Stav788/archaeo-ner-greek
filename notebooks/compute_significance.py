@@ -40,33 +40,28 @@ def run_significance():
     df_test = ds["test"].to_pandas()
     test_examples = df_to_gliner_examples(df_test, entity_descriptions)
     
-    # 3. Model Definitions & Configurations
-    models_info = {
-        "Baseline (No-Synthetic)": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260518_1704" / "best",
-            "threshold": 0.8
-        },
-        "Old 500-Synthetic": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260519_0101" / "best",
-            "threshold": 0.5
-        },
-        "New Curated 1:1": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260519_0256" / "best",
-            "threshold": 0.8
-        },
-        "Medium-Capacity Baseline": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260519_0822" / "best",
-            "threshold": 0.7
-        },
-        "High-Capacity Baseline": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260519_0704" / "best",
-            "threshold": 0.8
-        },
-        "Real-Seeded (r=4)": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260519_2016" / "best",
-            "threshold": 0.7
-        }
+    # 3. Model Definitions & Configurations from Registry
+    registry_path = base_dir / "data" / "models" / "model_registry.json"
+    print(f"Loading model configurations from registry: {registry_path}")
+    with open(registry_path, "r", encoding="utf-8") as f:
+        registry = json.load(f)
+        
+    active_models = {
+        "baseline (r=4)": "gliner2_archaeo_lora_20260518_1704",
+        "augmented-unfiltered (r=4, n=500)": "gliner2_archaeo_lora_20260519_0101",
+        "augmented-filtered (r=4, n=260)": "gliner2_archaeo_lora_20260519_0256",
+        "baseline (r=8)": "gliner2_archaeo_lora_20260519_0822",
+        "baseline (r=16)": "gliner2_archaeo_lora_20260519_0704",
+        "augmented-seeded-strict (r=4, n=93)": "gliner2_archaeo_lora_20260519_2016"
     }
+    
+    models_info = {}
+    for display, m_id in active_models.items():
+        if m_id in registry:
+            models_info[display] = {
+                "adapter": models_dir / m_id / "best",
+                "threshold": registry[m_id]["optimal_threshold"]
+            }
     
     print("\n--- 🧠 Initializing GLiNER2 Model ---")
     device = "cpu"
@@ -127,19 +122,19 @@ def run_significance():
     N = len(test_examples)
     
     pairs = [
-        ("Baseline (No-Synthetic)", "Real-Seeded (r=4)"),
-        ("New Curated 1:1", "Real-Seeded (r=4)"),
-        ("Old 500-Synthetic", "Real-Seeded (r=4)"),
-        ("Baseline (No-Synthetic)", "New Curated 1:1"),
-        ("Baseline (No-Synthetic)", "Old 500-Synthetic"),
-        ("Baseline (No-Synthetic)", "Medium-Capacity Baseline"),
-        ("Baseline (No-Synthetic)", "High-Capacity Baseline"),
-        ("New Curated 1:1", "Old 500-Synthetic"),
-        ("New Curated 1:1", "Medium-Capacity Baseline"),
-        ("New Curated 1:1", "High-Capacity Baseline"),
-        ("Medium-Capacity Baseline", "Old 500-Synthetic"),
-        ("Medium-Capacity Baseline", "High-Capacity Baseline"),
-        ("High-Capacity Baseline", "Old 500-Synthetic")
+        ("baseline (r=4)", "augmented-seeded-strict (r=4, n=93)"),
+        ("augmented-filtered (r=4, n=260)", "augmented-seeded-strict (r=4, n=93)"),
+        ("augmented-unfiltered (r=4, n=500)", "augmented-seeded-strict (r=4, n=93)"),
+        ("baseline (r=4)", "augmented-filtered (r=4, n=260)"),
+        ("baseline (r=4)", "augmented-unfiltered (r=4, n=500)"),
+        ("baseline (r=4)", "baseline (r=8)"),
+        ("baseline (r=4)", "baseline (r=16)"),
+        ("augmented-filtered (r=4, n=260)", "augmented-unfiltered (r=4, n=500)"),
+        ("augmented-filtered (r=4, n=260)", "baseline (r=8)"),
+        ("augmented-filtered (r=4, n=260)", "baseline (r=16)"),
+        ("baseline (r=8)", "augmented-unfiltered (r=4, n=500)"),
+        ("baseline (r=8)", "baseline (r=16)"),
+        ("baseline (r=16)", "augmented-unfiltered (r=4, n=500)")
     ]
     
     significance_results = []
@@ -215,7 +210,7 @@ def run_significance():
     # 6. Update docs/TODO.md directly
     todo_path = base_dir / "docs" / "TODO.md"
     if todo_path.exists():
-        print(f"📝 Updating {todo_path} with new benchmarks and significance p-values...")
+        print(f"📝 Updating {todo_path} with new benchmarks, significance p-values, and training history...")
         with open(todo_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
             
@@ -229,18 +224,58 @@ def run_significance():
             if "## 📊 Unified Model Performance Benchmarks" in line:
                 new_lines.append(line)
                 new_lines.append("\n")
-                # Write updated benchmarks table
                 new_lines.append("| Model Name & Identifier | Training Dataset Composition | LoRA Config ($r / \\\\alpha$) | Trainable Parameters | Optimal Calibrated Threshold | Dev (Validation) Split Metrics <br> (Precision / Recall / F1) | Gold Test Set Metrics <br> (Precision / Recall / F1) | Raw Counts <br> (TP / FP / FN) |\n")
                 new_lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |\n")
-                new_lines.append("| **Standard Baseline** <br> [`gliner2_archaeo_lora_20260518_1704`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/ij12xnv5) | `260` Human Sentences | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7812` / `0.5097` / **`0.6172`** | `0.7386` / `0.5509` / **`0.6311`** | `65` / `23` / `53` |\n")
-                new_lines.append("| **Old 500-Synthetic** <br> [`gliner2_archaeo_lora_20260519_0101`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/o5luweat) | `260` Human + `500` Uncurated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.5`** | `0.5957` / `0.5833` / **`0.5896`** | `0.6952` / `0.6186` / **`0.6547`** | `73` / `32` / `45` |\n")
-                new_lines.append("| **New Curated 1:1** <br> [`gliner2_archaeo_lora_20260519_0256`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/gbs39q1s) | `260` Human + `260` Curated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7360` / `0.5679` / **`0.6406`** | `0.7368` / `0.5679` / **`0.6400`** | `67` / `24` / `51` |\n")
-                new_lines.append("| **Medium-Capacity Baseline** <br> [`gliner2_archaeo_lora_20260519_0822`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/5bzdtbqi) | `260` Human Sentences | **$8$** / **$16$** | `1,327,104` <br> *(0.43% of base)* | **`0.7`** | `0.6929` / `0.6154` / **`0.6519`** | `0.6634` / `0.5678` / **`0.6119`** | `67` / `34` / `51` |\n")
-                new_lines.append("| **High-Capacity Baseline** <br> [`gliner2_archaeo_lora_20260519_0704`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/r0y27ufn) | `260` Human Sentences | **$16$** / **$32$** | `2,654,208` <br> *(1.01% of base)* | **`0.8`** | `0.7016` / `0.6084` / **`0.6517`** | `0.6800` / `0.5763` / **`0.6239`** | `68` / `32` / `50` |\n")
-                new_lines.append("| **Real-Seeded (r=4)** <br> [`gliner2_archaeo_lora_20260519_2016`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/n8f54ewg) | `260` Human + `93` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.7`** | `0.6923` / `0.6294` / **`0.6593`** | `0.7320` / `0.6017` / **`0.6605`** 🚀 | `71` / `26` / `47` |\n")
-
                 
-                # Skip the old benchmarks table lines until next section
+                active_order = [
+                    "gliner2_archaeo_lora_20260518_1704",
+                    "gliner2_archaeo_lora_20260519_0101",
+                    "gliner2_archaeo_lora_20260519_0256",
+                    "gliner2_archaeo_lora_20260519_0822",
+                    "gliner2_archaeo_lora_20260519_0704",
+                    "gliner2_archaeo_lora_20260519_2016"
+                ]
+                
+                for m_id in active_order:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        dev_p, dev_r, dev_f = m["dev_metrics"]["precision"], m["dev_metrics"]["recall"], m["dev_metrics"]["f1"]
+                        test_p, test_r, test_f = m["gold_test_metrics"]["precision"], m["gold_test_metrics"]["recall"], m["gold_test_metrics"]["f1"]
+                        tp, fp, fn = m["gold_test_metrics"]["tp"], m["gold_test_metrics"]["fp"], m["gold_test_metrics"]["fn"]
+                        
+                        emoji = " 🚀" if m_id == "gliner2_archaeo_lora_20260519_2016" else ""
+                        
+                        params = m["trainable_parameters"]
+                        pct = "*(0.25% of base)*"
+                        if m_id == "gliner2_archaeo_lora_20260519_0822":
+                            pct = "*(0.43% of base)*"
+                        elif m_id == "gliner2_archaeo_lora_20260519_0704":
+                            pct = "*(1.01% of base)*"
+                        
+                        lora_display = f"${m['lora_rank']}$ / ${m['lora_alpha']}$"
+                        if "baseline" in m["display_name"] and m["lora_rank"] > 4:
+                            lora_display = f"**{lora_display}**"
+                            
+                        # Format dynamic dataset name
+                        comp = m["dataset_composition"]
+                        parts = comp.split(" + ")
+                        formatted_parts = []
+                        for part in parts:
+                            words = part.split(" ")
+                            formatted_parts.append(f"`{words[0]}` " + " ".join(words[1:]))
+                        formatted_comp = " + ".join(formatted_parts)
+                            
+                        new_lines.append(
+                            f"| **{m['display_name']}** <br> [`{m_id}`]({m['wandb_url']}) | "
+                            f"{formatted_comp} | "
+                            f"{lora_display} | "
+                            f"`{params}` <br> {pct} | "
+                            f"**`{m['optimal_threshold']}`** | "
+                            f"`{dev_p:.4f}` / `{dev_r:.4f}` / **`{dev_f:.4f}`** | "
+                            f"`{test_p:.4f}` / `{test_r:.4f}` / **`{test_f:.4f}`**{emoji} | "
+                            f"`{tp}` / `{fp}` / `{fn}` |\n"
+                        )
+                
                 i += 1
                 while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("## "):
                     i += 1
@@ -256,7 +291,119 @@ def run_significance():
                 for res in significance_results:
                     new_lines.append(f"| **{res['comparison'].split(' vs. ')[0]}** vs. **{res['comparison'].split(' vs. ')[1]}** | **{res['observed_diff']}** | `{res['p_one_sided']:.4f}` | `{res['p_two_sided']:.4f}` | **{res['significant']}** |\n")
                 
-                # Skip old table lines
+                i += 1
+                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("## "):
+                    i += 1
+                continue
+                
+            # Match start of hyperparameters & convergence table
+            if "## 📈 Hyperparameters & Convergence Benchmarks" in line:
+                new_lines.append(line)
+                new_lines.append("\n")
+                new_lines.append("This table tracks hyperparameters, training datasets, and peak validation metrics achieved during active model training prior to post-training inference calibration:\n\n")
+                
+                columns = [
+                    "gliner2_archaeo_lora_20260518_1704",
+                    "gliner2_archaeo_lora_20260519_0101",
+                    "gliner2_archaeo_lora_20260519_0256",
+                    "gliner2_archaeo_lora_20260519_0822",
+                    "gliner2_archaeo_lora_20260519_0704",
+                    "gliner2_archaeo_lora_20260519_1206",
+                    "gliner2_archaeo_lora_20260519_1828",
+                    "gliner2_archaeo_lora_20260519_2016"
+                ]
+                
+                header_names = []
+                for m_id in columns:
+                    if m_id in registry:
+                        header_names.append(registry[m_id]["display_name"])
+                    else:
+                        header_names.append(m_id)
+                
+                header = "| Metric / Parameter | " + " | ".join(header_names) + " |"
+                align = "| :--- | " + " | ".join(":---:" for _ in columns) + " |"
+                new_lines.append(header + "\n")
+                new_lines.append(align + "\n")
+                
+                rank_row = "| **LoRA Rank ($r$)** | "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        rank_str = f"${m['lora_rank']}$"
+                        if m['lora_rank'] in (8, 16):
+                            rank_str = f"**{rank_str}**"
+                        if m_id == "gliner2_archaeo_lora_20260519_0704":
+                            rank_str += " *(Capacity bump)*"
+                        rank_row += rank_str + " | "
+                new_lines.append(rank_row.strip() + "\n")
+                
+                alpha_row = "| **LoRA Alpha ($\\alpha$)** | "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        alpha_str = f"${m['lora_alpha']}$"
+                        if m['lora_alpha'] in (16, 32):
+                            alpha_str = f"**{alpha_str}**"
+                        alpha_row += alpha_str + " | "
+                new_lines.append(alpha_row.strip() + "\n")
+                
+                size_row = "| **Dataset Size (Sentences)**| "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        comp = m["dataset_composition"]
+                        parts = comp.split(" + ")
+                        formatted_parts = []
+                        for part in parts:
+                            words = part.split(" ")
+                            formatted_parts.append(f"`{words[0]}` ({words[1]})")
+                        size_row += " + ".join(formatted_parts) + " | "
+                new_lines.append(size_row.strip() + "\n")
+                
+                epoch_row = "| **Best Epoch** | "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        epoch_row += f"{m['training_history']['best_epoch']} | "
+                new_lines.append(epoch_row.strip() + "\n")
+                
+                f1_row = "| **Peak Dev F1** | "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        f1 = m['training_history']['peak_dev_f1']
+                        f1_str = f"`{f1:.4f}`"
+                        if m_id == "gliner2_archaeo_lora_20260519_1206":
+                            f1_str = f"**{f1_str}** 🚀 *(All-time Peak)*"
+                        elif m_id == "gliner2_archaeo_lora_20260519_0822":
+                            f1_str = f"**{f1_str}**"
+                        f1_row += f1_str + " | "
+                new_lines.append(f1_row.strip() + "\n")
+                
+                p_row = "| Peak Dev Precision | "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        p = m['training_history']['peak_dev_precision']
+                        p_str = f"`{p:.4f}`"
+                        if m_id == "gliner2_archaeo_lora_20260518_1704":
+                            p_str = f"**{p_str}**"
+                        p_row += p_str + " | "
+                new_lines.append(p_row.strip() + "\n")
+                
+                r_row = "| Peak Dev Recall | "
+                for m_id in columns:
+                    if m_id in registry:
+                        m = registry[m_id]
+                        r = m['training_history']['peak_dev_recall']
+                        r_str = f"`{r:.4f}`"
+                        if m_id == "gliner2_archaeo_lora_20260519_1828":
+                            r_str = f"**{r_str}** 🚀 *(Peak recall)*"
+                        elif m_id == "gliner2_archaeo_lora_20260519_0822":
+                            r_str = f"**{r_str}**"
+                        r_row += r_str + " | "
+                new_lines.append(r_row.strip() + "\n")
+                
                 i += 1
                 while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("## "):
                     i += 1
