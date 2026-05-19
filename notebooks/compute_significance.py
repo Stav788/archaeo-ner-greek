@@ -63,8 +63,8 @@ def run_significance():
             "threshold": 0.8
         },
         "Real-Seeded (r=4)": {
-            "adapter": models_dir / "gliner2_archaeo_lora_20260519_1206" / "best",
-            "threshold": 0.8
+            "adapter": models_dir / "gliner2_archaeo_lora_20260519_2016" / "best",
+            "threshold": 0.7
         }
     }
     
@@ -232,12 +232,13 @@ def run_significance():
                 # Write updated benchmarks table
                 new_lines.append("| Model Name & Identifier | Training Dataset Composition | LoRA Config ($r / \\\\alpha$) | Trainable Parameters | Optimal Calibrated Threshold | Dev (Validation) Split Metrics <br> (Precision / Recall / F1) | Gold Test Set Metrics <br> (Precision / Recall / F1) | Raw Counts <br> (TP / FP / FN) |\n")
                 new_lines.append("| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |\n")
-                new_lines.append("| **Standard Baseline** <br> `gliner2_archaeo_lora_20260518_1704` | `260` Human Sentences | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7812` / `0.5097` / **`0.6172`** | `0.7386` / `0.5509` / **`0.6311`** | `65` / `23` / `53` |\n")
-                new_lines.append("| **Old 500-Synthetic** <br> `gliner2_archaeo_lora_20260519_0101` | `260` Human + `500` Uncurated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.5`** | `0.5957` / `0.5833` / **`0.5896`** | `0.6952` / `0.6186` / **`0.6547`** | `73` / `32` / `45` |\n")
-                new_lines.append("| **New Curated 1:1** <br> `gliner2_archaeo_lora_20260519_0256` | `260` Human + `260` Curated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7360` / `0.5679` / **`0.6406`** | `0.7368` / `0.5679` / **`0.6400`** | `67` / `24` / `51` |\n")
-                new_lines.append("| **Medium-Capacity Baseline** <br> `gliner2_archaeo_lora_20260519_0822` | `260` Human Sentences | **$8$** / **$16$** | `1,327,104` <br> *(0.43% of base)* | **`0.7`** | `0.6929` / `0.6154` / **`0.6519`** | `0.6634` / `0.5678` / **`0.6119`** | `67` / `34` / `51` |\n")
-                new_lines.append("| **High-Capacity Baseline** <br> `gliner2_archaeo_lora_20260519_0704` | `260` Human Sentences | **$16$** / **$32$** | `2,654,208` <br> *(1.01% of base)* | **`0.8`** | `0.7016` / `0.6084` / **`0.6517`** | `0.6800` / `0.5763` / **`0.6239`** | `68` / `32` / `50` |\n")
-                new_lines.append("| **Real-Seeded (r=4)** <br> `gliner2_archaeo_lora_20260519_1206` | `260` Human + `58` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7236` / `0.6224` / **`0.6692`** | `0.7556` / `0.5763` / **`0.6538`** | `68` / `22` / `50` |\n")
+                new_lines.append("| **Standard Baseline** <br> [`gliner2_archaeo_lora_20260518_1704`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/ij12xnv5) | `260` Human Sentences | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7812` / `0.5097` / **`0.6172`** | `0.7386` / `0.5509` / **`0.6311`** | `65` / `23` / `53` |\n")
+                new_lines.append("| **Old 500-Synthetic** <br> [`gliner2_archaeo_lora_20260519_0101`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/o5luweat) | `260` Human + `500` Uncurated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.5`** | `0.5957` / `0.5833` / **`0.5896`** | `0.6952` / `0.6186` / **`0.6547`** | `73` / `32` / `45` |\n")
+                new_lines.append("| **New Curated 1:1** <br> [`gliner2_archaeo_lora_20260519_0256`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/gbs39q1s) | `260` Human + `260` Curated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7360` / `0.5679` / **`0.6406`** | `0.7368` / `0.5679` / **`0.6400`** | `67` / `24` / `51` |\n")
+                new_lines.append("| **Medium-Capacity Baseline** <br> [`gliner2_archaeo_lora_20260519_0822`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/5bzdtbqi) | `260` Human Sentences | **$8$** / **$16$** | `1,327,104` <br> *(0.43% of base)* | **`0.7`** | `0.6929` / `0.6154` / **`0.6519`** | `0.6634` / `0.5678` / **`0.6119`** | `67` / `34` / `51` |\n")
+                new_lines.append("| **High-Capacity Baseline** <br> [`gliner2_archaeo_lora_20260519_0704`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/r0y27ufn) | `260` Human Sentences | **$16$** / **$32$** | `2,654,208` <br> *(1.01% of base)* | **`0.8`** | `0.7016` / `0.6084` / **`0.6517`** | `0.6800` / `0.5763` / **`0.6239`** | `68` / `32` / `50` |\n")
+                new_lines.append("| **Real-Seeded (r=4)** <br> [`gliner2_archaeo_lora_20260519_2016`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/n8f54ewg) | `260` Human + `93` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.7`** | `0.6923` / `0.6294` / **`0.6593`** | `0.7320` / `0.6017` / **`0.6605`** 🚀 | `71` / `26` / `47` |\n")
+
                 
                 # Skip the old benchmarks table lines until next section
                 i += 1

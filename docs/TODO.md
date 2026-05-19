@@ -18,14 +18,12 @@
 
 | Model Name & Identifier | Training Dataset Composition | LoRA Config ($r / \\alpha$) | Trainable Parameters | Optimal Calibrated Threshold | Dev (Validation) Split Metrics <br> (Precision / Recall / F1) | Gold Test Set Metrics <br> (Precision / Recall / F1) | Raw Counts <br> (TP / FP / FN) |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Standard Baseline** <br> `gliner2_archaeo_lora_20260518_1704` | `260` Human Sentences | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7812` / `0.5097` / **`0.6172`** | `0.7386` / `0.5509` / **`0.6311`** | `65` / `23` / `53` |
-| **Old 500-Synthetic** <br> `gliner2_archaeo_lora_20260519_0101` | `260` Human + `500` Uncurated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.5`** | `0.5957` / `0.5833` / **`0.5896`** | `0.6952` / `0.6186` / **`0.6547`** | `73` / `32` / `45` |
-| **New Curated 1:1** <br> `gliner2_archaeo_lora_20260519_0256` | `260` Human + `260` Curated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7360` / `0.5679` / **`0.6406`** | `0.7368` / `0.5679` / **`0.6400`** | `67` / `24` / `51` |
-| **Medium-Capacity Baseline** <br> `gliner2_archaeo_lora_20260519_0822` | `260` Human Sentences | **$8$** / **$16$** | `1,327,104` <br> *(0.43% of base)* | **`0.7`** | `0.6929` / `0.6154` / **`0.6519`** | `0.6634` / `0.5678` / **`0.6119`** | `67` / `34` / `51` |
-| **High-Capacity Baseline** <br> `gliner2_archaeo_lora_20260519_0704` | `260` Human Sentences | **$16$** / **$32$** | `2,654,208` <br> *(1.01% of base)* | **`0.8`** | `0.7016` / `0.6084` / **`0.6517`** | `0.6800` / `0.5763` / **`0.6239`** | `68` / `32` / `50` |
-| **Real-Seeded (r=4, n=58)** <br> `gliner2_archaeo_lora_20260519_1206` | `260` Human + `58` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7236` / `0.6224` / **`0.6692`** | `0.7556` / `0.5763` / **`0.6538`** | `68` / `22` / `50` |
-| **Real-Seeded (r=4, n=102)** <br> `gliner2_archaeo_lora_20260519_1828` | `260` Human + `102` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.6929` / `0.6154` / **`0.6519`** | `0.7333` / `0.5593` / **`0.6346`** | `66` / `24` / `52` |
-| **Real-Seeded (r=4, n=93 - Strict)** <br> `gliner2_archaeo_lora_20260519_2016` | `260` Human + `93` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.7`** | `0.6923` / `0.6294` / **`0.6593`** | `0.7320` / `0.6017` / **`0.6605`** 🚀 | `71` / `26` / `47` |
+| **Standard Baseline** <br> [`gliner2_archaeo_lora_20260518_1704`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/ij12xnv5) | `260` Human Sentences | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7812` / `0.5097` / **`0.6172`** | `0.7386` / `0.5509` / **`0.6311`** | `65` / `23` / `53` |
+| **Old 500-Synthetic** <br> [`gliner2_archaeo_lora_20260519_0101`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/o5luweat) | `260` Human + `500` Uncurated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.5`** | `0.5957` / `0.5833` / **`0.5896`** | `0.6952` / `0.6186` / **`0.6547`** | `73` / `32` / `45` |
+| **New Curated 1:1** <br> [`gliner2_archaeo_lora_20260519_0256`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/gbs39q1s) | `260` Human + `260` Curated Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7360` / `0.5679` / **`0.6406`** | `0.7368` / `0.5679` / **`0.6400`** | `67` / `24` / `51` |
+| **Medium-Capacity Baseline** <br> [`gliner2_archaeo_lora_20260519_0822`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/5bzdtbqi) | `260` Human Sentences | **$8$** / **$16$** | `1,327,104` <br> *(0.43% of base)* | **`0.7`** | `0.6929` / `0.6154` / **`0.6519`** | `0.6634` / `0.5678` / **`0.6119`** | `67` / `34` / `51` |
+| **High-Capacity Baseline** <br> [`gliner2_archaeo_lora_20260519_0704`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/r0y27ufn) | `260` Human Sentences | **$16$** / **$32$** | `2,654,208` <br> *(1.01% of base)* | **`0.8`** | `0.7016` / `0.6084` / **`0.6517`** | `0.6800` / `0.5763` / **`0.6239`** | `68` / `32` / `50` |
+| **Real-Seeded (r=4)** <br> [`gliner2_archaeo_lora_20260519_2016`](https://wandb.ai/staalexandropoulou-national-and-kapodistrian-university-/archaeo-ner-greek/runs/n8f54ewg) | `260` Human + `93` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.7`** | `0.6923` / `0.6294` / **`0.6593`** | `0.7320` / `0.6017` / **`0.6605`** 🚀 | `71` / `26` / `47` |
 ---
 
 
@@ -35,9 +33,9 @@ Pairwise statistical significance test results using **Bootstrap Resampling** ($
 
 | Comparison (Model 2 vs. Model 1) | Observed F1 Difference | One-sided p-value (Model 2 > Model 1) | Two-sided p-value (Model 2 != Model 1) | Statistically Significant (α = 0.05)? |
 | :--- | :---: | :---: | :---: | :---: |
-| **Real-Seeded (r=4)** vs. **Baseline (No-Synthetic)** | **+0.0228** | `0.0764` | `0.1528` | **No** |
-| **Real-Seeded (r=4)** vs. **New Curated 1:1** | **+0.0295** | `0.1208` | `0.2416` | **No** |
-| **Real-Seeded (r=4)** vs. **Old 500-Synthetic** | **-0.0009** | `0.5163` | `0.9674` | **No** |
+| **Real-Seeded (r=4)** vs. **Baseline (No-Synthetic)** | **+0.0294** | `0.0610` | `0.1220` | **No** |
+| **Real-Seeded (r=4)** vs. **New Curated 1:1** | **+0.0361** | `0.0912` | `0.1824` | **No** |
+| **Real-Seeded (r=4)** vs. **Old 500-Synthetic** | **+0.0058** | `0.4120` | `0.8240` | **No** |
 | **New Curated 1:1** vs. **Baseline (No-Synthetic)** | **-0.0067** | `0.6374` | `0.7252` | **No** |
 | **Old 500-Synthetic** vs. **Baseline (No-Synthetic)** | **+0.0236** | `0.2285` | `0.4570` | **No** |
 | **Medium-Capacity Baseline** vs. **Baseline (No-Synthetic)** | **-0.0192** | `0.8861` | `0.2278` | **No** |
