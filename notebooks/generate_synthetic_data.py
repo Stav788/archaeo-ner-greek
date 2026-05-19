@@ -37,9 +37,13 @@ from openai import OpenAI
 # Set up logging using the repository's standard configuration utility
 try:
     from archaeo_ner_greek.logging_config import setup_logging
+    from archaeo_ner_greek.utils import get_project_root
     setup_logging(log_file="data/synthetic_data_generation/synthetic_generation.log")
 except ImportError:
     logging.basicConfig(level=logging.INFO)
+    def get_project_root():
+        import pathlib
+        return pathlib.Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logger = logging.getLogger(__name__)
 
 # --- ENVIRONMENT HELPERS ---
@@ -87,16 +91,34 @@ random.seed(SEED)
 # ## 1. Greek Archaeology Guidelines
 
 # %%
-GUIDELINES = {
-    "artefact": "movable archaeological find/inscription in Greek. e.g. αγγείο, νομίσματα, επιγραφή",
-    "period": "historical era. e.g. ἑλληνιστικὴ περίοδος, κλασική εποχή",
-    "location": "geographic names. e.g. Ρόδος, Αθήνα, Κνωσός",
-    "context": "archaeological layer or structure. e.g. τάφοι, τείχη, στρώμα καταστροφής",
-    "material": "object substance. e.g. χρυσός, πηλός, χαλκός",
-    "person": "historical figures, deities, or annotator-named individuals. e.g. Απόλλων, Αλέξανδρος",
-    "species": "biological entities (flora/fauna). e.g. δρυς, ελιά",
-    "feature": "artistic style, architectural element, or motif."
-}
+def load_official_guidelines():
+    fallback_guidelines = {
+        "artefact": "movable archaeological find/inscription in Greek. e.g. αγγείο, νομίσματα, επιγραφή",
+        "period": "historical era. e.g. ἑλληνιστικὴ περίοδος, κλασική εποχή",
+        "location": "geographic names. e.g. Ρόδος, Αθήνα, Κνωσός",
+        "context": "archaeological layer or structure. e.g. τάφοι, τείχη, στρώμα καταστροφής",
+        "material": "object substance. e.g. χρυσός, πηλός, χαλκός",
+        "person": "historical figures, deities, or annotator-named individuals. e.g. Απόλλων, Αλέξανδρος",
+        "species": "biological entities (flora/fauna). e.g. δρυς, ελιά",
+        "feature": "artistic style, architectural element, or motif."
+    }
+    try:
+        resource_path = os.path.join(
+            get_project_root(),
+            "archaeo_ner_greek", "resources", "archaeoner_labels_definitions_v12_st.json"
+        )
+        if os.path.exists(resource_path):
+            with open(resource_path, "r", encoding="utf-8") as f:
+                official = json.load(f)
+            # Normalize keys to lowercase
+            normalized = {k.lower(): v for k, v in official.items()}
+            logger.info(f"Loaded official taxonomic guidelines from: {resource_path}")
+            return normalized
+    except Exception as e:
+        logger.warning(f"Failed to load official guidelines, falling back to default: {e}")
+    return fallback_guidelines
+
+GUIDELINES = load_official_guidelines()
 
 # %% [markdown]
 # ## 2. Tokenizer & GLiNER Span Alignment functions
@@ -517,6 +539,223 @@ def run_generation_pipeline(num_batches=NUM_BATCHES, num_samples_per_batch=NUM_S
             logger.info(f"Estimated Cost (OpenAI standard):      ${cost:.6f} USD")
 
 # %%
+class ExtraTextsSyntheticGenerator:
+    def __init__(self, api_generator):
+        self.api_generator = api_generator
+
+    def generate_batch_annotations(self, unannotated_texts, few_shot_pool, num_samples_per_batch=NUM_SAMPLES_PER_BATCH):
+        # Sample few-shot examples
+        samples = random.sample(few_shot_pool, k=min(3, len(few_shot_pool)))
+        examples_str = ""
+        for idx, s in enumerate(samples):
+            examples_str += f"### Example {idx + 1}:\n"
+            examples_str += json.dumps(s, ensure_ascii=False, indent=2) + "\n\n"
+
+        texts_to_annotate = "\n".join([f"- {text}" for text in unannotated_texts])
+
+        prompt = f"""You are a professional Greek Archaeologist and Domain Expert.
+Your objective is to identify and annotate named entities in the provided raw Greek archaeological texts according to our taxonomic guidelines.
+
+Guidelines:
+{json.dumps(GUIDELINES, ensure_ascii=False, indent=2)}
+
+Format Requirements:
+- Output MUST be structured in JSON containing a "samples" list.
+- Each sample must contain a "text" key (matching the provided raw text exactly) and an "entities" list.
+- Each entity must map to its exact string "entity" (as it appears in the text) and its matching classification tag in "types" (lowercase).
+
+{examples_str}
+
+Task:
+Correctly identify and classify all named entities in the following {len(unannotated_texts)} raw Greek archaeological texts:
+{texts_to_annotate}
+
+Return the annotated texts in the exact JSON format shown in the examples.
+"""
+        try:
+            response = self.api_generator.client.chat.completions.create(
+                model=self.api_generator.model,
+                messages=[
+                    {"role": "system", "content": "You are a specialized system that annotates Greek archaeological NER datasets in strict JSON format."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={ "type": "json_object" }
+            )
+            usage = response.usage
+            if usage:
+                self.api_generator.total_prompt_tokens += usage.prompt_tokens
+                self.api_generator.total_completion_tokens += usage.completion_tokens
+                logger.info(f"[{self.api_generator.model}] Annotation Batch Tokens: Input={usage.prompt_tokens}, Output={usage.completion_tokens}")
+            raw_content = json.loads(response.choices[0].message.content)
+            if isinstance(raw_content, list):
+                return raw_content
+            if isinstance(raw_content, dict):
+                # Check typical collection keys
+                for key in ["samples", "records", "data", "annotations"]:
+                    if key in raw_content and isinstance(raw_content[key], list):
+                        return raw_content[key]
+                # If there's a single list value in the dict, use it
+                list_values = [v for v in raw_content.values() if isinstance(v, list)]
+                if len(list_values) == 1:
+                    return list_values[0]
+                return raw_content.get("samples", [])
+            return []
+        except Exception as e:
+            logger.error(f"Error during API annotation batch using {self.api_generator.model}: {e}")
+            return []
+
+# %%
+def run_extra_texts_pipeline(model_name=None):
+    if model_name is None:
+        model_name = MODEL_NAME
+
+    # Resolve the generator modularly via the factory
+    try:
+        api_generator = get_synthetic_generator(model_name)
+    except ValueError as e:
+        logger.error(e)
+        return
+
+    # Load source pool from HF
+    repo_id = HF_REPO_ID_DEFAULT
+    few_shot_pool = FewShotPoolLoader.load(repo_id=repo_id)
+
+    # Load unannotated texts from data/extra_texts
+    extra_texts_dir = get_secret("SYNTHETIC_EXTRA_TEXTS_DIR") or os.path.join(
+        get_project_root(), "data", "extra_texts"
+    )
+    unannotated_sentences = []
+    
+    for filename in sorted(os.listdir(extra_texts_dir)):
+        if filename.endswith(".txt"):
+            filepath = os.path.join(extra_texts_dir, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                # Split content into sentences using regex
+                sentences = re.split(r'(?<=[.!?;])\s+', content)
+                for s in sentences:
+                    s_clean = s.strip()
+                    if len(s_clean) > 10:  # Skip trivial sentences
+                        unannotated_sentences.append(s_clean)
+                        
+    logger.info(f"Loaded {len(unannotated_sentences)} unannotated sentences from {extra_texts_dir}")
+
+    # Establish target output file before starting loop
+    output_dir = "data/synthetic_data_generation"
+    os.makedirs(output_dir, exist_ok=True)
+    normalized_model = str(model_name).lower().replace("-", "").replace(".", "")
+    output_filename = f"synthetic_archaeology_real_seeded_{normalized_model}.json"
+    output_file = os.path.join(output_dir, output_filename)
+    
+    # Truncate/remove old output file if starting a fresh run
+    if os.path.exists(output_file):
+        try:
+            os.remove(output_file)
+        except Exception:
+            pass
+
+    logger.info(f"Starting annotation of {len(unannotated_sentences)} sentences using model {model_name}...")
+    if FLATTEN_SPANS:
+        logger.info("Greedy span flattening is enabled. Overlapping/nested spans will be resolved.")
+    logger.info(f"Target Output File: {output_file} (Flushed incrementally after every batch)")
+
+    annotator = ExtraTextsSyntheticGenerator(api_generator)
+    
+    batch_size = NUM_SAMPLES_PER_BATCH
+    total_aligned = 0
+    total_skipped = 0
+    total_flattened = 0
+    label_distribution = defaultdict(int)
+    
+    hf_dataset = []
+    
+    # Iterate through unannotated sentences in batches
+    for i in range(0, len(unannotated_sentences), batch_size):
+        batch_sentences = unannotated_sentences[i:i+batch_size]
+        logger.info(f"Processing sentence batch {i//batch_size + 1}/{(len(unannotated_sentences) - 1)//batch_size + 1}...")
+        
+        batch = annotator.generate_batch_annotations(batch_sentences, few_shot_pool)
+        
+        # Align this batch immediately
+        batch_hf = []
+        for s in batch:
+            text = s.get("text")
+            entities = s.get("entities")
+            if text and entities:
+                aligned, aligned_cnt, skipped_cnt, flattened_cnt = convert_to_char_spans(text, entities)
+                batch_hf.append(aligned)
+                total_aligned += aligned_cnt
+                total_skipped += skipped_cnt
+                total_flattened += flattened_cnt
+                for lbl in aligned["labels"]:
+                    label_distribution[lbl["label"]] += 1
+        
+        # Append batch to running in-memory list and instantly flush/save to disk
+        hf_dataset.extend(batch_hf)
+        total_processed_records = len(hf_dataset)
+        
+        with open(output_file, "w", encoding="utf-8") as f_out:
+            json.dump(hf_dataset, f_out, ensure_ascii=False, indent=2)
+            
+        logger.info(f"Batch successfully processed and flushed to disk. (Cumulative: {total_processed_records} samples)")
+        
+    # Write final copy containing the exact count of generated sentences
+    final_output_filename = f"synthetic_archaeology_real_seeded_{normalized_model}_n{total_processed_records}.json"
+    final_output_file = os.path.join(output_dir, final_output_filename)
+    with open(final_output_file, "w", encoding="utf-8") as f_out:
+        json.dump(hf_dataset, f_out, ensure_ascii=False, indent=2)
+
+    logger.info(f"Hugging Face-ready synthetic dataset successfully saved to: {output_file}")
+    logger.info(f"Final dataset with count successfully saved to: {final_output_file}")
+    logger.info(f"Total processed training records: {total_processed_records}")
+
+    # Print Diagnostics & Insights
+    logger.info("=== DATASET DIAGNOSTICS & QUALITY ASSURANCE ===")
+    logger.info(f"Successfully Aligned Entities:      {total_aligned}")
+    logger.info(f"Skipped / Hallucinated Entities:    {total_skipped}")
+    if FLATTEN_SPANS:
+        logger.info(f"Resolved / Flattened Nested Spans:  {total_flattened}")
+    if total_aligned + total_skipped > 0:
+        alignment_rate = (total_aligned / (total_aligned + total_skipped)) * 100
+        logger.info(f"Entity Alignment Success Rate:      {alignment_rate:.1f}%")
+    logger.info("Entity Type Distribution:")
+    for lbl, count in sorted(label_distribution.items(), key=lambda x: x[1], reverse=True):
+        logger.info(f"  - {lbl}: {count}")
+
+    if hasattr(api_generator, "total_prompt_tokens") and api_generator.total_prompt_tokens > 0:
+        logger.info("=== CUMULATIVE TOKEN & CREDIT CONSUMPTION ===")
+        logger.info(f"Total Input (Prompt) Tokens:      {api_generator.total_prompt_tokens}")
+        logger.info(f"Total Output (Completion) Tokens:  {api_generator.total_completion_tokens}")
+        
+        if "gemini" in str(model_name).lower():
+            cost = (api_generator.total_prompt_tokens * 0.000000075) + (api_generator.total_completion_tokens * 0.00000030)
+            logger.info(f"Estimated Cost (Google Pay-As-You-Go): ${cost:.6f} USD (Free Tier: $0.00)")
+        elif "gpt-4o" in str(model_name).lower():
+            cost = (api_generator.total_prompt_tokens * 0.0000025) + (api_generator.total_completion_tokens * 0.000010)
+            logger.info(f"Estimated Cost (OpenAI standard):      ${cost:.6f} USD")
+
+# %%
 if __name__ == "__main__":
-    # Execute generation if run as script
-    run_generation_pipeline(num_batches=NUM_BATCHES, num_samples_per_batch=NUM_SAMPLES_PER_BATCH)
+    # Check if we should use the raw extra_texts pool
+    extra_texts_dir = get_secret("SYNTHETIC_EXTRA_TEXTS_DIR") or os.path.join(
+        get_project_root(), "data", "extra_texts"
+    )
+    has_extra_texts = os.path.exists(extra_texts_dir) and any(f.endswith(".txt") for f in os.listdir(extra_texts_dir))
+    
+    use_extra = get_secret("SYNTHETIC_USE_EXTRA_TEXTS")
+    if use_extra is not None:
+        should_run_extra = use_extra.lower() in ("true", "1", "yes")
+    else:
+        should_run_extra = has_extra_texts
+
+    if should_run_extra:
+        logger.info("======================================================================")
+        logger.info("🚀 Starting Real-World Seeded Annotation Pipeline")
+        logger.info(f"📂 Scanning for unannotated texts in: {extra_texts_dir}")
+        logger.info("======================================================================")
+        run_extra_texts_pipeline()
+    else:
+        logger.info("======================================================================")
+        logger.info("🚀 Starting Pure Synthetic Generation Pipeline (Few-Shot from scratch)")
+        logger.info("======================================================================")
+        run_generation_pipeline(num_batches=NUM_BATCHES, num_samples_per_batch=NUM_SAMPLES_PER_BATCH)
