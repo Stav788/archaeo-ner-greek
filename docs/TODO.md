@@ -25,6 +25,7 @@
 | **High-Capacity Baseline** <br> `gliner2_archaeo_lora_20260519_0704` | `260` Human Sentences | **$16$** / **$32$** | `2,654,208` <br> *(1.01% of base)* | **`0.8`** | `0.7016` / `0.6084` / **`0.6517`** | `0.6800` / `0.5763` / **`0.6239`** | `68` / `32` / `50` |
 | **Real-Seeded (r=4, n=58)** <br> `gliner2_archaeo_lora_20260519_1206` | `260` Human + `58` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.7236` / `0.6224` / **`0.6692`** | `0.7556` / `0.5763` / **`0.6538`** | `68` / `22` / `50` |
 | **Real-Seeded (r=4, n=102)** <br> `gliner2_archaeo_lora_20260519_1828` | `260` Human + `102` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.8`** | `0.6929` / `0.6154` / **`0.6519`** | `0.7333` / `0.5593` / **`0.6346`** | `66` / `24` / `52` |
+| **Real-Seeded (r=4, n=93 - Strict)** <br> `gliner2_archaeo_lora_20260519_2016` | `260` Human + `93` Real-Seeded Synth | $4$ / $8$ | `663,552` <br> *(0.25% of base)* | **`0.7`** | `0.6923` / `0.6294` / **`0.6593`** | `0.7320` / `0.6017` / **`0.6605`** 🚀 | `71` / `26` / `47` |
 ---
 
 
@@ -127,14 +128,15 @@ If the new model achieves a higher Gold Test F1 score than the baseline, run the
 
 This table tracks hyperparameters, training datasets, and peak validation metrics achieved during active model training prior to post-training inference calibration:
 
-| Metric / Parameter | Standard Baseline (r=4) | Old 500-Synthetic (r=4) | New Curated 1:1 (r=4) | Medium-Capacity Baseline (r=8) | High-Capacity Baseline (r=16) | Real-Seeded (r=4, n=58) | Real-Seeded (r=4, n=102) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **LoRA Rank ($r$)** | $4$ | $4$ | $4$ | **$8$** | **$16$** *(Capacity bump)* | $4$ | $4$ |
-| **LoRA Alpha ($\alpha$)** | $8$ | $8$ | $8$ | **$16$** | **$32$** | $8$ | $8$ |
-| **Dataset Size (Sentences)**| `260` (Human) | `260` (Human) + `500` (Synth) | `260` (Human) + `260` (Synth) | `260` (Human only) | `260` (Human only) | `260` (Human) + `58` (Synth) | `260` (Human) + `102` (Synth) |
-| **Best Epoch** | Epoch 6 / 20 | Epoch 9 / 20 | Epoch 18 / 20 | Epoch 10 / 20 | Epoch 10 / 20 | Epoch 14 / 20 | Epoch 17 / 20 |
-| **Peak Dev F1** | `0.6434` | `0.5643` | `0.6406` | **`0.6519`** | `0.6517` | **`0.6692`** 🚀 *(All-time Peak)* | `0.6519` |
-| Peak Dev Precision | **`0.7812`** | `0.5957` | `0.7360` | `0.6929` | `0.7016` | `0.7411` | `0.6929` |
-| Peak Dev Recall | `0.5097` | `0.5833` | `0.5679` | **`0.6154`** | `0.6084` | `0.6091` | **`0.6154`** 🚀 *(Peak recall)* |
+| Metric / Parameter | Standard Baseline (r=4) | Old 500-Synthetic (r=4) | New Curated 1:1 (r=4) | Medium-Capacity Baseline (r=8) | High-Capacity Baseline (r=16) | Real-Seeded (r=4, n=58) | Real-Seeded (r=4, n=102) | Real-Seeded (r=4, n=93 - Strict) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **LoRA Rank ($r$)** | $4$ | $4$ | $4$ | **$8$** | **$16$** *(Capacity bump)* | $4$ | $4$ | $4$ |
+| **LoRA Alpha ($\alpha$)** | $8$ | $8$ | $8$ | **$16$** | **$32$** | $8$ | $8$ | $8$ |
+| **Dataset Size (Sentences)**| `260` (Human) | `260` (Human) + `500` (Synth) | `260` (Human) + `260` (Synth) | `260` (Human only) | `260` (Human only) | `260` (Human) + `58` (Synth) | `260` (Human) + `102` (Synth) | `260` (Human) + `93` (Synth) |
+| **Best Epoch** | Epoch 6 / 20 | Epoch 9 / 20 | Epoch 18 / 20 | Epoch 10 / 20 | Epoch 10 / 20 | Epoch 14 / 20 | Epoch 17 / 20 | Epoch 17 / 20 |
+| **Peak Dev F1** | `0.6434` | `0.5643` | `0.6406` | **`0.6519`** | `0.6517` | **`0.6692`** 🚀 *(All-time Peak)* | `0.6519` | `0.6593` |
+| Peak Dev Precision | **`0.7812`** | `0.5957` | `0.7360` | `0.6929` | `0.7016` | `0.7411` | `0.6929` | `0.6923` |
+| Peak Dev Recall | `0.5097` | `0.5833` | `0.5679` | **`0.6154`** | `0.6084` | `0.6091` | **`0.6154`** 🚀 *(Peak recall)* | `0.6294` |
+
 
 
