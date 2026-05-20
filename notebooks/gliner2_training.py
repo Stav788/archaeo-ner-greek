@@ -230,9 +230,9 @@ if use_synthetic and synthetic_path:
         logger.info(f"🧬 Loading synthetic dataset for training from: {synth_file_path}")
         df_synthetic = pd.read_json(synth_file_path)
         
-        # Curate and sample synthetic data to a target size (e.g. 260) to achieve balanced ratio
-        target_size = int(env_vars.get("GLINER_SYNTHETIC_SAMPLE_SIZE", 260))
-        df_synthetic = curate_synthetic_data(df_synthetic, target_size=target_size, seed=42)
+        # Curate and sample synthetic data using ratio-parameterized stratified sampling
+        ratio = float(env_vars.get("GLINER_SYNTHETIC_RATIO", 2.0))
+        df_synthetic = curate_synthetic_data(df_synthetic, df_train, ratio=ratio, seed=42)
         
         # Concatenate synthetic data directly to the training set
         df_train = pd.concat([df_train, df_synthetic], ignore_index=True)

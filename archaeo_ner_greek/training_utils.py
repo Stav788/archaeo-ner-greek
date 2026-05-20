@@ -117,21 +117,140 @@ def df_to_gliner_examples(df, entity_descriptions):
         ))
     return examples
 
-def curate_synthetic_data(df, target_size=260, seed=42):
+def curate_synthetic_data(df_synthetic, df_gold, ratio=2.0, seed=42):
     """
-    Curates and samples a synthetic NER DataFrame to the specified target_size.
-    Ensures a balanced, deterministic, and high-quality 1:1 mixture with gold training data.
+    Curates and samples a synthetic NER DataFrame using a greedy multi-label 
+    stratification heuristic to balance rare entity categories.
+    
+    Args:
+        df_synthetic: DataFrame containing synthetic sentences and labels.
+        df_gold: DataFrame of gold training data OR integer representing gold count.
+        ratio: Target ratio of synthetic to gold data (default 2.0 = 2:1).
+        seed: Random seed for reproducibility.
     """
-    if df is None or len(df) == 0:
-        logger.warning("curate_synthetic_data: Input DataFrame is empty or None.")
-        return df
+    import random
+    from collections import Counter
 
-    if len(df) <= target_size:
-        logger.info(f"curate_synthetic_data: DataFrame size ({len(df)}) <= target_size ({target_size}). No sampling needed.")
-        return df
+    if df_synthetic is None or len(df_synthetic) == 0:
+        logger.warning("curate_synthetic_data: Input synthetic DataFrame is empty or None.")
+        return df_synthetic
 
-    logger.info(f"curate_synthetic_data: Deterministically sampling {target_size} synthetic examples from pool of {len(df)} using seed={seed}.")
-    return df.sample(n=target_size, random_state=seed).reset_index(drop=True)
+    # Dynamic filtration of Ottoman Period / Tourkokratia sentences
+    extra_texts_dir = Path("data/extra_texts")
+    if extra_texts_dir.exists():
+        import re
+        import pandas as pd
+        tourko_files = [f for f in os.listdir(extra_texts_dir) if f.startswith("tourkokratia_") and f.endswith(".txt")]
+        if tourko_files:
+            logger.info(f"curate_synthetic_data: Found {len(tourko_files)} Ottoman Period/Tourkokratia files. Initializing filtration...")
+            tourko_sentences = []
+            for f in tourko_files:
+                with open(extra_texts_dir / f, "r", encoding="utf-8") as file_in:
+                    content = file_in.read().strip()
+                    sentences = re.split(r'(?<=[.!?;])\s+', content)
+                    for s in sentences:
+                        s_clean = s.strip()
+                        if len(s_clean) > 10:
+                            tourko_sentences.append(s_clean)
+            
+            def normalize_text(t):
+                return re.sub(r'\s+', '', t).lower()
+            
+            norm_tourko = {normalize_text(s) for s in tourko_sentences}
+            
+            filtered_rows = []
+            removed_count = 0
+            for _, row in df_synthetic.iterrows():
+                text = row.get('input') or row.get('sentence_field') or ""
+                norm_text = normalize_text(text)
+                is_tourko = False
+                if norm_text in norm_tourko:
+                    is_tourko = True
+                else:
+                    sig = text[:40].strip()
+                    norm_sig = normalize_text(sig)
+                    if len(norm_sig) >= 15:
+                        for ns in norm_tourko:
+                            if norm_sig in ns or ns in norm_sig:
+                                is_tourko = True
+                                break
+                
+                if is_tourko:
+                    removed_count += 1
+                else:
+                    filtered_rows.append(row)
+            
+            if removed_count > 0:
+                df_synthetic = pd.DataFrame(filtered_rows).reset_index(drop=True)
+                logger.info(f"curate_synthetic_data: Dynamically filtered out {removed_count} Ottoman Period/Tourkokratia sentences from pool. Pool size reduced to {len(df_synthetic)}.")
+            else:
+                logger.info("curate_synthetic_data: No Ottoman Period/Tourkokratia sentences were matched in the pool.")
+
+    gold_count = len(df_gold) if hasattr(df_gold, "__len__") else int(df_gold)
+    target_size = int(gold_count * ratio)
+    
+    logger.info(f"curate_synthetic_data: Target synthetic-to-gold ratio = {ratio}:1. Gold count = {gold_count}. Target size = {target_size}.")
+
+    if len(df_synthetic) <= target_size:
+        logger.info(f"curate_synthetic_data: Synthetic pool size ({len(df_synthetic)}) <= target_size ({target_size}). Returning full synthetic set.")
+        return df_synthetic
+
+    # Map sentences to their entity labels
+    sentence_labels = []
+    for idx, row in df_synthetic.iterrows():
+        lbl_list = row.get('labels', [])
+        labels = set()
+        if isinstance(lbl_list, list):
+            for item in lbl_list:
+                if isinstance(item, dict) and 'label' in item:
+                    labels.add(item['label'])
+                elif isinstance(item, str):
+                    labels.add(item)
+        elif isinstance(lbl_list, str):
+            labels.add(lbl_list)
+        sentence_labels.append((idx, labels))
+
+    # Greedy stratification loop
+    random.seed(seed)
+    selected_indices = set()
+    running_counts = Counter()
+    
+    # Collect all unique labels present in synthetic dataset
+    all_labels = {lbl for _, lbls in sentence_labels for lbl in lbls}
+    for lbl in all_labels:
+        running_counts[lbl] = 0
+
+    logger.info(f"curate_synthetic_data: Running greedy multi-label stratification for labels: {list(all_labels)}")
+
+    while len(selected_indices) < target_size:
+        # Find the rarest label in current selection
+        rarest_label = min(all_labels, key=lambda l: running_counts[l])
+        
+        # Filter candidate sentence indices that contain this rarest label and are not yet selected
+        candidates = [idx for idx, lbls in sentence_labels if rarest_label in lbls and idx not in selected_indices]
+        
+        if candidates:
+            # Seeded random choice
+            chosen = random.choice(candidates)
+        else:
+            # Fallback: choose from remaining unselected sentences containing any label
+            unselected = [idx for idx, lbls in sentence_labels if idx not in selected_indices and lbls]
+            if unselected:
+                chosen = random.choice(unselected)
+            else:
+                # Absolute fallback: choose from any remaining unselected sentences
+                remaining = list(set(df_synthetic.index) - selected_indices)
+                if not remaining:
+                    break
+                chosen = random.choice(remaining)
+                
+        selected_indices.add(chosen)
+        # Update running counts for all labels in the chosen sentence
+        for lbl in next(lbls for idx, lbls in sentence_labels if idx == chosen):
+            running_counts[lbl] += 1
+
+    logger.info(f"curate_synthetic_data: Sampling complete. Selected {len(selected_indices)} samples. Label distribution: {dict(running_counts)}")
+    return df_synthetic.loc[list(selected_indices)].reset_index(drop=True)
 
 def verify_annotations(df, target_ids, targets, pair_text, pair_label):
     """Debug function to verify specific problematic samples or targets."""

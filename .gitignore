@@ -159,7 +159,11 @@ fabric.properties
 # Misc
 *~
 
-data/
+data/*
+!data/synthetic_data_generation/
+!data/synthetic_data_generation/synthetic_archaeology_real_seeded_gemini25flash_n1350.json
+!data/extra_texts/
+!data/extra_texts/*
 tmp/
 static/jquery-ui-themes-1.12.1/
 bootstrap-4.4.1-dist.zip

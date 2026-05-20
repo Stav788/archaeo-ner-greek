@@ -46,19 +46,30 @@ def run_significance():
     with open(registry_path, "r", encoding="utf-8") as f:
         registry = json.load(f)
         
-    active_models = {
-        "baseline (r=4)": "gliner2_archaeo_lora_20260518_1704",
-        "augmented-unfiltered (r=4, n=500)": "gliner2_archaeo_lora_20260519_0101",
-        "augmented-filtered (r=4, n=260)": "gliner2_archaeo_lora_20260519_0256",
-        "baseline (r=8)": "gliner2_archaeo_lora_20260519_0822",
-        "baseline (r=16)": "gliner2_archaeo_lora_20260519_0704",
-        "augmented-seeded-strict (r=4, n=93)": "gliner2_archaeo_lora_20260519_2016"
+    model_names = {
+        "gliner2_archaeo_lora_20260518_1704": "baseline (r=4)",
+        "gliner2_archaeo_lora_20260519_0101": "augmented-unfiltered",
+        "gliner2_archaeo_lora_20260519_0256": "augmented-filtered",
+        "gliner2_archaeo_lora_20260519_0822": "baseline (r=8)",
+        "gliner2_archaeo_lora_20260519_0704": "baseline (r=16)",
+        "gliner2_archaeo_lora_20260519_1206": "augmented-seeded (n=58)",
+        "gliner2_archaeo_lora_20260519_1828": "augmented-seeded (n=102)",
+        "gliner2_archaeo_lora_20260519_2016": "augmented-seeded-strict"
     }
+
+    active_model_ids = [
+        "gliner2_archaeo_lora_20260518_1704",
+        "gliner2_archaeo_lora_20260519_0101",
+        "gliner2_archaeo_lora_20260519_0256",
+        "gliner2_archaeo_lora_20260519_0822",
+        "gliner2_archaeo_lora_20260519_0704",
+        "gliner2_archaeo_lora_20260519_2016"
+    ]
     
     models_info = {}
-    for display, m_id in active_models.items():
+    for m_id in active_model_ids:
         if m_id in registry:
-            models_info[display] = {
+            models_info[m_id] = {
                 "adapter": models_dir / m_id / "best",
                 "threshold": registry[m_id]["optimal_threshold"]
             }
@@ -70,10 +81,11 @@ def run_significance():
     model.to(device)
     
     # Collect sentence-level TP, FP, FN counts for each model
-    sentence_counts = {name: [] for name in models_info.keys()}
+    sentence_counts = {m_id: [] for m_id in models_info.keys()}
     
-    for name, config in models_info.items():
-        print(f"\nEvaluating '{name}' with threshold {config['threshold']}...")
+    for m_id, config in models_info.items():
+        display_name = model_names.get(m_id, m_id)
+        print(f"\nEvaluating '{display_name}' ({m_id}) with threshold {config['threshold']}...")
         adapter_path = config["adapter"]
         threshold = config["threshold"]
         
@@ -104,12 +116,12 @@ def run_significance():
                     fp += 1
             fn = len(temp_gt)
             
-            sentence_counts[name].append({"tp": tp, "fp": fp, "fn": fn})
+            sentence_counts[m_id].append({"tp": tp, "fp": fp, "fn": fn})
             
         # Print observed global performance
-        tps = sum(c["tp"] for c in sentence_counts[name])
-        fps = sum(c["fp"] for c in sentence_counts[name])
-        fns = sum(c["fn"] for c in sentence_counts[name])
+        tps = sum(c["tp"] for c in sentence_counts[m_id])
+        fps = sum(c["fp"] for c in sentence_counts[m_id])
+        fns = sum(c["fn"] for c in sentence_counts[m_id])
         precision = tps / (tps + fps) if (tps + fps) > 0 else 0
         recall = tps / (tps + fns) if (tps + fns) > 0 else 0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
@@ -121,28 +133,30 @@ def run_significance():
     B = 10000
     N = len(test_examples)
     
-    pairs = [
-        ("baseline (r=4)", "augmented-seeded-strict (r=4, n=93)"),
-        ("augmented-filtered (r=4, n=260)", "augmented-seeded-strict (r=4, n=93)"),
-        ("augmented-unfiltered (r=4, n=500)", "augmented-seeded-strict (r=4, n=93)"),
-        ("baseline (r=4)", "augmented-filtered (r=4, n=260)"),
-        ("baseline (r=4)", "augmented-unfiltered (r=4, n=500)"),
-        ("baseline (r=4)", "baseline (r=8)"),
-        ("baseline (r=4)", "baseline (r=16)"),
-        ("augmented-filtered (r=4, n=260)", "augmented-unfiltered (r=4, n=500)"),
-        ("augmented-filtered (r=4, n=260)", "baseline (r=8)"),
-        ("augmented-filtered (r=4, n=260)", "baseline (r=16)"),
-        ("baseline (r=8)", "augmented-unfiltered (r=4, n=500)"),
-        ("baseline (r=8)", "baseline (r=16)"),
-        ("baseline (r=16)", "augmented-unfiltered (r=4, n=500)")
+    pairs_ids = [
+        ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260519_2016"),
+        ("gliner2_archaeo_lora_20260519_0256", "gliner2_archaeo_lora_20260519_2016"),
+        ("gliner2_archaeo_lora_20260519_0101", "gliner2_archaeo_lora_20260519_2016"),
+        ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260519_0256"),
+        ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260519_0101"),
+        ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260519_0822"),
+        ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260519_0704"),
+        ("gliner2_archaeo_lora_20260519_0256", "gliner2_archaeo_lora_20260519_0101"),
+        ("gliner2_archaeo_lora_20260519_0256", "gliner2_archaeo_lora_20260519_0822"),
+        ("gliner2_archaeo_lora_20260519_0256", "gliner2_archaeo_lora_20260519_0704"),
+        ("gliner2_archaeo_lora_20260519_0822", "gliner2_archaeo_lora_20260519_0101"),
+        ("gliner2_archaeo_lora_20260519_0822", "gliner2_archaeo_lora_20260519_0704"),
+        ("gliner2_archaeo_lora_20260519_0704", "gliner2_archaeo_lora_20260519_0101")
     ]
     
     significance_results = []
     
-    for model_a_name, model_b_name in pairs:
+    for id_a, id_b in pairs_ids:
+        model_a_name = model_names.get(id_a, id_a)
+        model_b_name = model_names.get(id_b, id_b)
         print(f"Testing difference: {model_b_name} vs. {model_a_name}")
-        counts_a = sentence_counts[model_a_name]
-        counts_b = sentence_counts[model_b_name]
+        counts_a = sentence_counts[id_a]
+        counts_b = sentence_counts[id_b]
         
         # Observed difference
         tps_a = sum(c["tp"] for c in counts_a)
@@ -253,7 +267,7 @@ def run_significance():
                             pct = "*(1.01% of base)*"
                         
                         lora_display = f"${m['lora_rank']}$ / ${m['lora_alpha']}$"
-                        if "baseline" in m["display_name"] and m["lora_rank"] > 4:
+                        if m["lora_rank"] > 4:
                             lora_display = f"**{lora_display}**"
                             
                         # Format dynamic dataset name
@@ -265,8 +279,10 @@ def run_significance():
                             formatted_parts.append(f"`{words[0]}` " + " ".join(words[1:]))
                         formatted_comp = " + ".join(formatted_parts)
                             
+                        display_name = model_names.get(m_id, m_id)
+                        
                         new_lines.append(
-                            f"| **{m['display_name']}** <br> [`{m_id}`]({m['wandb_url']}) | "
+                            f"| **{display_name}** <br> [`{m_id}`]({m['wandb_url']}) | "
                             f"{formatted_comp} | "
                             f"{lora_display} | "
                             f"`{params}` <br> {pct} | "
@@ -277,7 +293,7 @@ def run_significance():
                         )
                 
                 i += 1
-                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("## "):
+                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("#"):
                     i += 1
                 continue
                 
@@ -292,7 +308,7 @@ def run_significance():
                     new_lines.append(f"| **{res['comparison'].split(' vs. ')[0]}** vs. **{res['comparison'].split(' vs. ')[1]}** | **{res['observed_diff']}** | `{res['p_one_sided']:.4f}` | `{res['p_two_sided']:.4f}` | **{res['significant']}** |\n")
                 
                 i += 1
-                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("## "):
+                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("#"):
                     i += 1
                 continue
                 
@@ -315,10 +331,8 @@ def run_significance():
                 
                 header_names = []
                 for m_id in columns:
-                    if m_id in registry:
-                        header_names.append(registry[m_id]["display_name"])
-                    else:
-                        header_names.append(m_id)
+                    name = model_names.get(m_id, m_id)
+                    header_names.append(name)
                 
                 header = "| Metric / Parameter | " + " | ".join(header_names) + " |"
                 align = "| :--- | " + " | ".join(":---:" for _ in columns) + " |"
@@ -405,7 +419,7 @@ def run_significance():
                 new_lines.append(r_row.strip() + "\n")
                 
                 i += 1
-                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("## "):
+                while i < len(lines) and not lines[i].startswith("---") and not lines[i].startswith("#"):
                     i += 1
                 continue
                 

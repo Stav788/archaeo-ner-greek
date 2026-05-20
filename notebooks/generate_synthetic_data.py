@@ -126,7 +126,9 @@ CRITICAL STRICTION & EXCLUSION RULES (To match strict human annotations):
 2. **No Generic Spaces or Modern Rooms**: Do NOT annotate generic spaces, modern rooms, or architectural areas (e.g., «βεράντα», «εξωτερικός χώρος», «αίθουσα», «εργαστήριο» when not referring to concrete ancient structures) as CONTEXT.
 3. **No Common/Generic Elements as FEATURES**: Do NOT annotate generic, common architectural features (e.g., simple walls like «τοίχος», generic rooms, or standard floors) as FEATURE unless they have a very specific, prominent archaeological or stylistic definition.
 4. **Boundary Strictness**: Be highly selective and conservative. Do not label words or phrases that human expert annotators would consider common terminology rather than formal archaeological named entities.
+5. **No Modern Entities (Spatial or Institutional)**: Do NOT annotate modern spatial or institutional references. Specifically, do NOT annotate modern spaces, rooms, or structures (e.g., «ξενοδοχείο», «οικόπεδο Πατέρα-Τσαγκαρούλη», «τσιμεντένιος σκελετός», «σύγχρονη οικοδομή») as CONTEXT, and do NOT annotate modern organizations, universities, or government bodies (e.g., «Πανεπιστήμιο Αθηνών», «Εφορεία Αρχαιοτήτων», «KB' Εφορεία») as LOCATION.
 """
+
 
 
 # %% [markdown]
