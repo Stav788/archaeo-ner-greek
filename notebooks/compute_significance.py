@@ -54,7 +54,9 @@ def run_significance():
         "gliner2_archaeo_lora_20260519_0704": "baseline (r=16)",
         "gliner2_archaeo_lora_20260519_1206": "augmented-seeded (n=58)",
         "gliner2_archaeo_lora_20260519_1828": "augmented-seeded (n=102)",
-        "gliner2_archaeo_lora_20260519_2016": "augmented-seeded-strict"
+        "gliner2_archaeo_lora_20260519_2016": "augmented-seeded-strict",
+        "gliner2_archaeo_lora_20260520_1247": "augmented-seeded-2.0",
+        "gliner2_archaeo_lora_20260520_1445": "augmented-seeded-1to1"
     }
 
     active_model_ids = [
@@ -63,7 +65,9 @@ def run_significance():
         "gliner2_archaeo_lora_20260519_0256",
         "gliner2_archaeo_lora_20260519_0822",
         "gliner2_archaeo_lora_20260519_0704",
-        "gliner2_archaeo_lora_20260519_2016"
+        "gliner2_archaeo_lora_20260519_2016",
+        "gliner2_archaeo_lora_20260520_1247",
+        "gliner2_archaeo_lora_20260520_1445"
     ]
     
     models_info = {}
@@ -134,6 +138,8 @@ def run_significance():
     N = len(test_examples)
     
     pairs_ids = [
+        ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260520_1445"),
+        ("gliner2_archaeo_lora_20260519_2016", "gliner2_archaeo_lora_20260520_1445"),
         ("gliner2_archaeo_lora_20260518_1704", "gliner2_archaeo_lora_20260519_2016"),
         ("gliner2_archaeo_lora_20260519_0256", "gliner2_archaeo_lora_20260519_2016"),
         ("gliner2_archaeo_lora_20260519_0101", "gliner2_archaeo_lora_20260519_2016"),
@@ -247,7 +253,9 @@ def run_significance():
                     "gliner2_archaeo_lora_20260519_0256",
                     "gliner2_archaeo_lora_20260519_0822",
                     "gliner2_archaeo_lora_20260519_0704",
-                    "gliner2_archaeo_lora_20260519_2016"
+                    "gliner2_archaeo_lora_20260519_2016",
+                    "gliner2_archaeo_lora_20260520_1247",
+                    "gliner2_archaeo_lora_20260520_1445"
                 ]
                 
                 for m_id in active_order:
@@ -257,7 +265,7 @@ def run_significance():
                         test_p, test_r, test_f = m["gold_test_metrics"]["precision"], m["gold_test_metrics"]["recall"], m["gold_test_metrics"]["f1"]
                         tp, fp, fn = m["gold_test_metrics"]["tp"], m["gold_test_metrics"]["fp"], m["gold_test_metrics"]["fn"]
                         
-                        emoji = " 🚀" if m_id == "gliner2_archaeo_lora_20260519_2016" else ""
+                        emoji = " 🚀" if m_id == "gliner2_archaeo_lora_20260520_1445" else ""
                         
                         params = m["trainable_parameters"]
                         pct = "*(0.25% of base)*"
@@ -326,7 +334,9 @@ def run_significance():
                     "gliner2_archaeo_lora_20260519_0704",
                     "gliner2_archaeo_lora_20260519_1206",
                     "gliner2_archaeo_lora_20260519_1828",
-                    "gliner2_archaeo_lora_20260519_2016"
+                    "gliner2_archaeo_lora_20260519_2016",
+                    "gliner2_archaeo_lora_20260520_1247",
+                    "gliner2_archaeo_lora_20260520_1445"
                 ]
                 
                 header_names = []
