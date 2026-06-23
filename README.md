@@ -10,15 +10,22 @@ The results showed that fine-tuning improved the model's performance compared wi
 
 Overall, this thesis aims to create the first specialised resource for the application of NER to Greek archaeology and to provide a basis for future research on the extraction and organisation of archaeological information from Greek texts.
 
+## Dataset
 
+The dataset is available on the Hugging Face Hub: [Stalexan/archaeo-ner-greek](https://huggingface.co/datasets/Stalexan/archaeo-ner-greek/).
 
+## Citation
 
+If you use this dataset or code, please cite the following Master's thesis:
 
-
-
-
-
-
-
-
----
+```bibtex
+@mastersthesis{citekey,
+  author       = "Author Name",
+  title        = "The Title of the Master's Thesis",
+  school       = "Name of the University or Institution",
+  year         = "YYYY",
+  address      = "City, Country",
+  month        = "Month",
+  note         = "Optional additional information"
+}
+```
