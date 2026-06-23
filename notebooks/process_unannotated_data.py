@@ -126,13 +126,37 @@ except Exception as e:
 repo_id = env_vars.get("HF_REPO_ID", HF_REPO_ID)
 hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
 
+# 1. Load HF dataset
 logger.info(f"Loading {HF_SUBSET} from HF dataset: {repo_id}")
 ds = load_dataset(repo_id, name=HF_SUBSET, split=HF_SPLIT, token=hf_token)
 df_raw = ds.to_pandas()
+df_hf = df_raw[df_raw["used_for"] == USED_FOR_FILTER].copy()
+logger.info(f"Loaded {len(df_hf)} records from HF with used_for == '{USED_FOR_FILTER}'")
 
-# Filter for rows matching target used_for value
-df_filtered = df_raw[df_raw["used_for"] == USED_FOR_FILTER].copy()
-logger.info(f"Filtered {len(df_filtered)} / {len(df_raw)} records with used_for == '{USED_FOR_FILTER}'")
+# 2. Load local files
+extra_texts_dir = Path("data/extra_texts")
+logger.info(f"Loading local texts from {extra_texts_dir}...")
+local_records = []
+if extra_texts_dir.exists():
+    for filename in sorted(os.listdir(extra_texts_dir)):
+        if filename.endswith(".txt") and "clarin" in filename and "tourkokratia" not in filename:
+            filepath = extra_texts_dir / filename
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            local_records.append({
+                "doc_id": filename,
+                "raw_text": content
+            })
+else:
+    logger.error(f"Directory {extra_texts_dir} does not exist.")
+
+df_local = pd.DataFrame(local_records)
+logger.info(f"Loaded {len(df_local)} local files matching '*clarin*' (excluding 'tourkokratia').")
+
+# 3. Concatenate HF and local records
+df_filtered = pd.concat([df_hf[["doc_id", "raw_text"]], df_local], ignore_index=True)
+logger.info(f"Total records to process (HF + Local): {len(df_filtered)}")
+
 
 # %% [markdown]
 # ## 2. Sentence Splitting & Cleanup Heuristics
