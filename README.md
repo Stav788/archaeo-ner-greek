@@ -22,7 +22,7 @@ If you use this dataset or code, please cite the following Master's thesis:
 @mastersthesis{alexandropoulou2026construction,
   author       = "Alexandropoulou, Stavroula",
   title        = "Construction and Annotation of a Greek Corpus of Archaeological Texts",
-  school       = "MSc in Digital Humanities, specialization: Augmented Textual Studies",
+  school       = "EKPA, MSc in Digital Humanities, specialization: Augmented Textual Studies",
   year         = "2026",
   note         = "Student ID: 7561182400007"
 }
