@@ -361,6 +361,7 @@ Generate {num_samples_per_batch} highly realistic, varied archaeological texts w
 # %% [markdown]
 # ## 5. Execution Pipeline
 
+# %%
 def get_synthetic_generator(model_name: str):
     """Factory to resolve API keys, handle fallbacks, and instantiate the generator."""
     google_key = get_secret("GOOGLE_API_KEY")
