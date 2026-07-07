@@ -19,11 +19,11 @@ The dataset is available on the Hugging Face Hub: [Stalexan/archaeo-ner-greek](h
 If you use this dataset or code, please cite the following Master's thesis:
 
 ```bibtex
-@mastersthesis{alexandropoulou2026construction,
-  author       = "Alexandropoulou, Stavroula",
-  title        = "Construction and Annotation of a Greek Corpus of Archaeological Texts",
-  school       = "University of Athens",
-  year         = "2026",
-  note         = "MSc in Digital Humanities, specialization: Augmented Textual Studies"
+@masterthesis{uoadl:5410546,
+    BIBTEX_ENTRY = "masterthesis",
+    year = "2026",
+    school = "Postgraduate Programme Digital Humanities, National and Kapodistrian University of Athens",
+    author = "Alexandropoulou Stavroula",
+    title = "Construction and Annotation of a Greek Corpus of Archaeological Texts"
 }
 ```
