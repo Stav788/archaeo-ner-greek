@@ -20,10 +20,10 @@ If you use this dataset or code, please cite the following Master's thesis:
 
 ```bibtex
 @masterthesis{uoadl:5410546,
-    BIBTEX_ENTRY = "masterthesis",
-    year = "2026",
-    school = "Postgraduate Programme Digital Humanities, National and Kapodistrian University of Athens",
     author = "Alexandropoulou Stavroula",
-    title = "Construction and Annotation of a Greek Corpus of Archaeological Texts"
+    title = "Construction and Annotation of a Greek Corpus of Archaeological Texts",
+    year = "2026",
+    school = "National and Kapodistrian University of Athens",
+    note = "Postgraduate Programme Digital Humanities"
 }
 ```
