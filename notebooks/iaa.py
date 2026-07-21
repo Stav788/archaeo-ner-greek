@@ -63,8 +63,7 @@ logger.info(f"Annotator B: {annotator_b}")
 # We pull the `argilla` subset which contains the full archival record with responses.
 
 # %%
-logger.info(f"Fetching 'argilla' subset from {repo_id}...")
-dataset = load_dataset(repo_id, name="argilla", split="train", token=hf_token)
+dataset = load_dataset(repo_id, name="argilla", split="train", token=hf_token, revision="dev")
 df = dataset.to_pandas()
 
 logger.info(f"Loaded {len(df)} records from HF.")
