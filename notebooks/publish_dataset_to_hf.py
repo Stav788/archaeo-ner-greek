@@ -165,7 +165,7 @@ try:
     logger.info("Fetching all records for archival subset (COMPLETE BACKUP)...")
     merged_hf_ds_full = merge_datasets_in_memory(
         client=client,
-        dataset_names=[dataset_name, test_dataset_name],
+        dataset_names=[dataset_name],
         workspace=workspace,
         username=None  # Preserve all annotators for IAA/Provenance
     )
@@ -175,10 +175,17 @@ try:
     logger.info(f"Fetching records for training subset (User: {default_annotator})...")
     merged_hf_ds_training = merge_datasets_in_memory(
         client=client,
-        dataset_names=[dataset_name, test_dataset_name],
+        dataset_names=[dataset_name],
         workspace=workspace,
         username=default_annotator
     )
+    
+    # Remove provenance column for HF Hub release
+    if "provenance" in merged_hf_ds_full.column_names:
+        merged_hf_ds_full = merged_hf_ds_full.remove_columns("provenance")
+    if "provenance" in merged_hf_ds_training.column_names:
+        merged_hf_ds_training = merged_hf_ds_training.remove_columns("provenance")
+        
 except Exception as e:
     logger.error(f"Failed to merge datasets: {e}")
     sys.exit(1)
@@ -280,7 +287,8 @@ try:
         config_name="argilla",
         split="train",
         token=hf_token,
-        private=hf_private
+        private=hf_private,
+        revision="dev"
     )
 
     # B) Push the Partitioned "default" subset (CLEAN TRAINING DATA)
@@ -294,7 +302,8 @@ try:
     final_dd.push_to_hub(
         repo_id=repo_id,
         token=hf_token,
-        private=hf_private
+        private=hf_private,
+        revision="dev"
     )
     
     hf_url = f"https://huggingface.co/datasets/{repo_id}"
@@ -342,11 +351,29 @@ logger.info("Pulling dataset back from Hugging Face for verification...")
 
 try:
     # 1. Pull back the 'argilla' subset (Full Pool)
-    pulled_argilla = load_dataset(repo_id, name="argilla", split="train", token=hf_token, download_mode="force_redownload")
+    try:
+        pulled_argilla = load_dataset(
+            repo_id, name="argilla", split="train", token=hf_token, 
+            revision="dev", download_mode="force_redownload", verification_mode="no_checks"
+        )
+    except TypeError:
+        pulled_argilla = load_dataset(
+            repo_id, name="argilla", split="train", token=hf_token, 
+            revision="dev", download_mode="force_redownload", ignore_verifications=True
+        )
     logger.info(f"Pulled {len(pulled_argilla)} records from 'argilla' subset.")
     
     # 2. Pull back the 'default' subset (Partitions)
-    pulled_partitions = load_dataset(repo_id, name="default", token=hf_token, download_mode="force_redownload")
+    try:
+        pulled_partitions = load_dataset(
+            repo_id, name="default", token=hf_token, 
+            revision="dev", download_mode="force_redownload", verification_mode="no_checks"
+        )
+    except TypeError:
+        pulled_partitions = load_dataset(
+            repo_id, name="default", token=hf_token, 
+            revision="dev", download_mode="force_redownload", ignore_verifications=True
+        )
     logger.info(f"Pulled partitions: Train={len(pulled_partitions['train'])}, Val={len(pulled_partitions['validation'])}, Test={len(pulled_partitions['test'])}")
     
     # 3. Compare record counts
@@ -360,7 +387,7 @@ try:
         logger.info(f"✅ SUCCESS: Record counts match exactly (Full: {argilla_count}, Training: {partitions_total}).")
     else:
         logger.error(f"❌ FAILURE: Record count mismatch!")
-        logger.error(f"   - Original in-memory: {original_count}")
+        logger.error(f"   - Original in-memory (Full): {original_full_count}, (Training): {original_training_count}")
         logger.error(f"   - 'argilla' subset:   {argilla_count}")
         logger.error(f"   - Sum of partitions:  {partitions_total}")
         sys.exit(1)
