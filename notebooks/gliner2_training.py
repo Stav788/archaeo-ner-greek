@@ -58,7 +58,7 @@ if IN_COLAB:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-U", "protobuf", "torchao", "transformers", "huggingface_hub==0.25.2"])
     os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
     try:
-        from google.colab import userdata
+        from google.colab import userdata  # type: ignore
         def get_sec(k):
             val = userdata.get(k)
             return val.strip() if val else None
@@ -212,8 +212,7 @@ else:
 repo_id = env_vars.get("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
 hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
 
-logger.info(f"Loading partitions from HF: {repo_id} (Subset: default)")
-ds = load_dataset(repo_id, name="default", token=hf_token)
+ds = load_dataset(repo_id, name="default", token=hf_token, revision="dev")
 
 # Map splits to DataFrames for compatibility with downstream conversion
 df_train = ds["train"].to_pandas()
