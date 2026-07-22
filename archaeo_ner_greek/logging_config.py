@@ -1,5 +1,8 @@
 import logging
 import logging.config
+import warnings
+from datetime import datetime
+from pathlib import Path
 
 LOGGING_CONFIG = {
     "version": 1,
@@ -59,15 +62,14 @@ def setup_logging(level: int = logging.INFO, log_file: str = None):
     Applies the default LOGGING_CONFIG to the current environment and
     suppresses deprecation warnings from third-party libraries like Argilla.
     """
-    import warnings
-    from datetime import datetime
-    
     # Suppress the datetime.utcnow() warning from argilla
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="argilla")
     
     if log_file is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-        log_file = f"/tmp/training_{timestamp}.log"
+        log_dir = Path("tmp")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = str(log_dir / f"training_{timestamp}.log")
     
     config = LOGGING_CONFIG.copy()
     config["loggers"][""]["level"] = level

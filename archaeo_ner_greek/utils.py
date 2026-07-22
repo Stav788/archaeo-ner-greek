@@ -982,6 +982,7 @@ def process_and_upload_greek_texts(
     """
     logger.info("Initializing SaT model (sat-3l, style=ud, lang=el)...")
     try:
+        from wtpsplit import SaT
         model = SaT("sat-3l", style_or_domain="ud", language="el")
     except Exception as e:
         logger.error(f"Failed to load SaT model: {e}")
@@ -1582,8 +1583,6 @@ def highlight_diff_entities_html(text: str, spans_a: list, spans_b: list, name_a
         a_labels = tuple(sorted(char_states[i]['a']))
         b_labels = tuple(sorted(char_states[i]['b']))
         state = (a_labels, b_labels)
-        from wtpsplit import SaT
-        sat = SaT("2layer", hub_model="saatard/sat-greek")
         
         if state != current_state:
             if current_state is not None:
@@ -1802,3 +1801,68 @@ def export_to_latex_table(
         with open(filename, "w", encoding="utf-8") as f:
             f.write(full_latex)
         print(f"Also saved to {filename}")
+
+def audit_annotation_consistency(df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Audits annotation consistency across a dataset DataFrame.
+    Identifies multi-label conflicts (same surface string assigned different entity categories),
+    computes overall label consistency percentage, and tracks sentence ID provenance.
+    """
+    from collections import defaultdict
+    
+    mention_to_details = defaultdict(lambda: defaultdict(list))
+    
+    for idx, row in df.iterrows():
+        meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        sent_id = row.get("doc_id") or row.get("document_sentence_id_field") or row.get("id") or row.get("sentence_id") or row.get("record_id") or meta.get("doc_id") or f"rec_{idx}"
+        text = row.get("input") or row.get("sentence_field", "")
+        labels = row.get("labels", [])
+        if text is None or labels is None:
+            continue
+        if len(labels) == 0:
+            continue
+            
+        for ent in labels:
+            if isinstance(ent, dict):
+                start, end = ent.get("start"), ent.get("end")
+                lbl = ent.get("label")
+                if start is not None and end is not None and 0 <= start < end <= len(text):
+                    mention = text[start:end].strip().lower()
+                    if mention:
+                        mention_to_details[mention][lbl].append({"id": sent_id, "text": text})
+
+    conflicts = []
+    total_repeated = 0
+    consistent_repeated = 0
+    
+    for mention, label_map in mention_to_details.items():
+        label_counts = {lbl: len(ids) for lbl, ids in label_map.items()}
+        total_occurrences = sum(label_counts.values())
+        unique_labels = list(label_map.keys())
+        
+        if total_occurrences > 1:
+            total_repeated += 1
+            if len(unique_labels) == 1:
+                consistent_repeated += 1
+            else:
+                conflicts.append({
+                    "Mention": mention,
+                    "Total Occurrences": total_occurrences,
+                    "Labels Breakdown": label_counts,
+                    "Primary Label": max(label_counts, key=label_counts.get),
+                    "Sentence Provenance": dict(label_map)
+                })
+                
+    consistency_rate = (consistent_repeated / total_repeated * 100) if total_repeated > 0 else 100.0
+    
+    df_conflicts = pd.DataFrame(conflicts).sort_values("Total Occurrences", ascending=False) if conflicts else pd.DataFrame()
+    
+    return {
+        "consistency_score": round(consistency_rate, 2),
+        "total_unique_mentions": len(mention_to_details),
+        "total_repeated_mentions": total_repeated,
+        "consistent_repeated_mentions": consistent_repeated,
+        "conflicting_mentions_count": len(conflicts),
+        "conflicts_df": df_conflicts
+    }
+
