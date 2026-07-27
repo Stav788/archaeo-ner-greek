@@ -25,10 +25,17 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 from datasets import load_dataset
 from dotenv import load_dotenv, find_dotenv
 from sklearn.manifold import TSNE
 from sklearn.feature_extraction.text import TfidfVectorizer
+from archaeo_ner_greek.utils import get_project_root
+
+# Setup logs directory for EDA PNG output artifacts using pathlib & get_project_root
+project_root = get_project_root()
+LOGS_DIR = Path(os.getenv("LOGS_DIR")) if os.getenv("LOGS_DIR") else (project_root / "logs")
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## 1. Data Loading
@@ -82,6 +89,7 @@ sns.barplot(data=df_stats, x="Label", y="Count", hue="Split", palette="muted")
 plt.title("Entity Label Distribution per Split", fontweight='bold')
 plt.xticks(rotation=45)
 plt.tight_layout()
+plt.savefig(LOGS_DIR / "entity_label_distribution.png", dpi=300)
 plt.show()
 
 # Display Table
@@ -252,6 +260,7 @@ plt.xlabel("T-SNE 1")
 plt.ylabel("T-SNE 2")
 plt.legend(title="Split")
 plt.tight_layout()
+plt.savefig(LOGS_DIR / "semantic_distribution_tsne.png", dpi=300)
 plt.show()
 
 # %% [markdown]
@@ -359,7 +368,7 @@ def save_ner_png(text, entities, filename):
         )
         img = img.crop(final_bbox)
 
-    output_path = f"viz_{filename}.png"
+    output_path = LOGS_DIR / f"viz_{filename}.png"
     img.save(output_path)
     print(f"Saved visualization to {output_path}")
 
@@ -411,8 +420,10 @@ if not audit_results['conflicts_df'].empty:
     full_latex_todo = "\n".join(latex_items)
     
     # Write to a dedicated file for paper_todo.tex inclusion
-    todo_out_file = ".agents/archaeoner_paper/todo_consistency_sentences.tex"
-    with open(todo_out_file, "w", encoding="utf-8") as f:
+    todo_out_dir = project_root / "tmp" / "archaeoner_paper"
+    todo_out_dir.mkdir(parents=True, exist_ok=True)
+    todo_out_file = todo_out_dir / "todo_consistency_sentences.tex"
+    with todo_out_file.open("w", encoding="utf-8") as f:
         f.write(full_latex_todo)
     print(f"✅ Saved complete Greek sentence audit list to {todo_out_file}")
 
