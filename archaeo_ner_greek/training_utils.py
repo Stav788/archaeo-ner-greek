@@ -35,7 +35,11 @@ def setup_colab():
     """Sets up Google Colab environment: installs deps, clones repo, and loads secrets."""
     logger.info("Pipeline Version: 1.4.0")
     logger.info(">>> Environment: Google Colab")
-    from google.colab import userdata
+    try:
+        from google.colab import userdata  # type: ignore
+    except ImportError:
+        userdata = None
+
     
     # 1. Install uv
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
@@ -285,7 +289,7 @@ def verify_annotations(df, target_ids, targets, pair_text, pair_label):
                 logger.debug("Labels: [NONE]")
             for l in labels:
                 m = text[l['start']:l['end']].strip()
-                logger.debug(f"Actual Label by {annotator}: '{m}' as {l['label']}")
+                logger.debug(f"Actual Label: '{m}' as {l['label']}")
 
 def plot_training_history(results):
     """Plots training and validation loss/metrics from GLiNER2Trainer results."""
@@ -590,6 +594,88 @@ def compute_metrics(model, dataset, threshold=0.8):
     
     return metrics
 
+def compute_bootstrap_metrics(model, dataset, threshold=0.8, n_bootstraps=1000, seed=42):
+    """
+    Computes Micro-F1, Precision, Recall, and 95% Bootstrap Confidence Intervals.
+    Does not require re-training. Performs non-parametric resampling over predictions.
+    """
+    import numpy as np
+    import random
+    import sys
+    
+    random.seed(seed)
+    np.random.seed(seed)
+
+    model.eval()
+
+    # Pre-extract model predictions on the dataset once
+    extracted_samples = []
+    for i, ex in enumerate(dataset):
+        text = ex[0]
+        gt_entities = ex[1]["entities"]
+        entity_descriptions = ex[1]["entity_descriptions"]
+
+        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
+        pred_entities = output.get('entities', {})
+
+        pred_spans = [(t, lbl) for lbl, texts in pred_entities.items() for t in texts]
+        gt_spans = [(t, lbl) for lbl, texts in gt_entities.items() for t in texts]
+        extracted_samples.append((pred_spans, gt_spans))
+
+    num_samples = len(extracted_samples)
+    f1_list, p_list, r_list = [], [], []
+
+    for b in range(n_bootstraps):
+        indices = np.random.choice(num_samples, size=num_samples, replace=True)
+        tp, fp, fn = 0, 0, 0
+        
+        for idx in indices:
+            pred_spans, gt_spans = extracted_samples[idx]
+            temp_gt = gt_spans.copy()
+            for p in pred_spans:
+                if p in temp_gt:
+                    tp += 1
+                    temp_gt.remove(p)
+                else:
+                    fp += 1
+            fn += len(temp_gt)
+            
+        p = tp / (tp + fp) if (tp + fp) > 0 else 0
+        r = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (p * r) / (p + r) if (p + r) > 0 else 0
+        
+        f1_list.append(f1)
+        p_list.append(p)
+        r_list.append(r)
+
+    f1_mean = float(np.mean(f1_list))
+    f1_ci_lower = float(np.percentile(f1_list, 2.5))
+    f1_ci_upper = float(np.percentile(f1_list, 97.5))
+
+    p_mean = float(np.mean(p_list))
+    p_ci_lower = float(np.percentile(p_list, 2.5))
+    p_ci_upper = float(np.percentile(p_list, 97.5))
+
+    r_mean = float(np.mean(r_list))
+    r_ci_lower = float(np.percentile(r_list, 2.5))
+    r_ci_upper = float(np.percentile(r_list, 97.5))
+
+    results = {
+        "f1_mean": f1_mean, "f1_ci": (f1_ci_lower, f1_ci_upper),
+        "precision_mean": p_mean, "precision_ci": (p_ci_lower, p_ci_upper),
+        "recall_mean": r_mean, "recall_ci": (r_ci_lower, r_ci_upper),
+    }
+
+    logger.info(f"\n========================================")
+    logger.info(f"BOOTSTRAP RESULTS ({n_bootstraps} iterations, threshold={threshold})")
+    logger.info(f"Micro-F1 : {f1_mean:.4f} (95% CI: [{f1_ci_lower:.4f}, {f1_ci_upper:.4f}])")
+    logger.info(f"Precision: {p_mean:.4f} (95% CI: [{p_ci_lower:.4f}, {p_ci_upper:.4f}])")
+    logger.info(f"Recall   : {r_mean:.4f} (95% CI: [{r_ci_lower:.4f}, {r_ci_upper:.4f}])")
+    logger.info(f"========================================")
+    sys.stdout.flush()
+
+    return results
+
 def get_cnt(data):
     """Counts total entity mentions in a dataset or list of InputExamples."""
     exs = getattr(data, "examples", data)
@@ -601,6 +687,9 @@ def evaluate_adapter(model, adapter_path, test_data, threshold=0.8):
     """
     logger.info(f"Loading adapter from: {adapter_path}")
     model.load_adapter(adapter_path)
+    import torch
+    if torch.cuda.is_available():
+        model.to("cuda")
     
     test_data_formatted = [
         (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
@@ -651,29 +740,17 @@ def show_detailed_report(model, dataset, threshold=0.5):
     Calculates per-category PRF metrics and displays a sortable table.
     """
     import pandas as pd
+    from tabulate import tabulate
     
     # 1. Get predictions (compute_metrics returns per_label_metrics by default in our utils)
     results = compute_metrics(model, dataset, threshold=threshold)
-    
-    # Emoji Mapping
-    emojis = {
-        "ARTEFACT": "🏺",
-        "LOCATION": "🏛️",
-        "PERIOD": "⏳",
-        "CONTEXT": "📜",
-        "MATERIAL": "🧱",
-        "SPECIES": "🧬",
-        "PERSON": "👤",
-        "FEATURE": "🗺️"
-    }
     
     per_label = results.get('per_label_metrics', {})
     
     rows = []
     for label, metrics in per_label.items():
-        emoji = emojis.get(label, "🏷️")
         rows.append({
-            "Entity Type": f"{emoji} {label}",
+            "Entity Type": label,
             "Precision": float(metrics['precision']),
             "Recall": float(metrics['recall']),
             "F1-Score": float(metrics['f1']),
@@ -682,6 +759,14 @@ def show_detailed_report(model, dataset, threshold=0.5):
     
     if not rows:
         return "No entity predictions found for report."
+
+    df_report = pd.DataFrame(rows).sort_values(by="F1-Score", ascending=False)
+    print("\n" + "="*50)
+    print("PER-CATEGORY PERFORMANCE REPORT (Threshold: {})".format(threshold))
+    print("="*50)
+    print(tabulate(df_report, headers="keys", tablefmt="grid", floatfmt=".4f"))
+    print("="*50 + "\n")
+    return df_report
 
     # Sort by F1 descending by default
     df = pd.DataFrame(rows).sort_values("F1-Score", ascending=False)
