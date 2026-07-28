@@ -125,7 +125,7 @@ except ImportError:
 from archaeo_ner_greek.training_utils import (
     setup_local, setup_colab, df_to_gliner_examples, curate_synthetic_data,
     plot_training_history, plot_threshold_curves, 
-    plot_ner_confusion_matrix, compute_metrics, get_cnt, evaluate_adapter, 
+    plot_ner_confusion_matrix, compute_metrics, compute_bootstrap_metrics, get_cnt, evaluate_adapter, 
     show_error_analysis, show_detailed_report,
     safe_wandb_log, setup_wandb, upload_wandb_artifact
 )
@@ -135,6 +135,20 @@ if IN_COLAB:
     env_vars = setup_colab()
 else:
     env_vars = setup_local()
+
+import argparse
+
+parser = argparse.ArgumentParser(description="GLiNER2 Training & Evaluation Pipeline")
+parser.add_argument("--bootstrap-only", action="store_true", help="Skip training and run bootstrap CI evaluation on the gold test set.")
+parser.add_argument("--eval-only", action="store_true", help="Skip training and evaluate the saved best model adapter.")
+parser.add_argument("--adapter-path", type=str, default=None, help="Path to adapter checkpoint (used with --bootstrap-only or --eval-only).")
+parser.add_argument("--no-wandb", action="store_true", help="Explicitly disable WandB logging.")
+args, _ = parser.parse_known_args()
+
+# Disable WandB if --no-wandb or WANDB_DISABLED env var is set
+if args.no_wandb or os.environ.get("WANDB_DISABLED", "").lower() in ("1", "true"):
+    env_vars.pop("WANDB_API_KEY", None)
+    os.environ["WANDB_MODE"] = "disabled"
 
 # 2. Optimized Imports
 from tabulate import tabulate
@@ -352,29 +366,44 @@ training_config = TrainingConfig(
     validate_data=True,
 )
 
-# Initialize WandB run & capture logging function
-log_to_wandb = setup_wandb(wandb_enabled, training_config.wandb_project, experiment_name, training_config)
-
-# %% [markdown]
-# ## Base Model Instantiation
-
-# %%
-model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-
-# %% [markdown]
-# ## Training Engine Setup (GLiNER2Trainer)
-
-# %%
-trainer = GLiNER2Trainer(model, training_config, compute_metrics=compute_metrics)
+if not (args.bootstrap_only or args.eval_only):
+    log_to_wandb = setup_wandb(wandb_enabled, training_config.wandb_project, experiment_name, training_config)
+    model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+    trainer = GLiNER2Trainer(model, training_config, compute_metrics=compute_metrics)
+else:
+    log_to_wandb = lambda metrics, prefix="": None
 
 # %% [markdown]
 # ## Execution of Fine-tuning Pipeline
 
 # %%
-results = trainer.train(
-    train_data=train_split, 
-    eval_data=val_split
-)
+if args.bootstrap_only or args.eval_only:
+    logger.info(">>> Skipping training (--bootstrap-only / --eval-only flag enabled).")
+    # Resolve adapter path
+    if args.adapter_path:
+        adapter_path = Path(args.adapter_path)
+    else:
+        # Find latest run adapter automatically
+        existing_runs = sorted(MODELS_DIR.glob("gliner2_archaeo_lora_*"))
+        if existing_runs:
+            adapter_path = existing_runs[-1] / "best"
+        else:
+            raise FileNotFoundError("No existing model checkpoints found in data/models/.")
+    experiment_name = adapter_path.parent.name
+    logger.info(f"Target adapter path: {adapter_path}")
+    best_model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+    best_model.load_adapter(adapter_path)
+    if torch.cuda.is_available():
+        best_model.to("cuda")
+        logger.info(f"Loaded model onto GPU device: {torch.cuda.get_device_name(0)}")
+    else:
+        logger.info("CUDA unavailable. Running inference on CPU.")
+    best_threshold = 0.8
+else:
+    results = trainer.train(
+        train_data=train_split, 
+        eval_data=val_split
+    )
 
 # %% [markdown]
 # # Evaluation & Error Diagnostics
@@ -383,119 +412,121 @@ results = trainer.train(
 # ## Post-Training Session Summary
 
 # %%
-best_run = max(results["eval_metrics_history"], key=lambda x: x['f1'])
-best_epoch = best_run['epoch']
-best_p = best_run['precision']
-best_r = best_run['recall']
-best_f1 = best_run['f1']
-total_epochs = len(results["eval_metrics_history"])
+if not (args.bootstrap_only or args.eval_only):
+    best_run = max(results["eval_metrics_history"], key=lambda x: x['f1'])
+    best_epoch = best_run['epoch']
+    best_p = best_run['precision']
+    best_r = best_run['recall']
+    best_f1 = best_run['f1']
+    total_epochs = len(results["eval_metrics_history"])
 
-logger.info(f"Training completed!")
-logger.info(f"Experiment name: {experiment_name}")
-logger.info(f"Total steps: {results['total_steps']}")
-logger.info(f"Total epochs: {total_epochs}")
-logger.info(f"Training time: {results['total_time_seconds']/60:.1f} minutes")
-logger.info(f"Best Epoch: {best_epoch + 1}/{total_epochs}") # +1 for 1-based indexing
-logger.info(f"Best PRF: Precision: {best_p:.4f}, Recall: {best_r:.4f}, F1: {best_f1:.4f}")
-# 2. Prepare data rows
-table_data = [
-    ["Train Split",   len(train_split), get_cnt(train_split)],
-    ["Val Split",     len(val_split),   get_cnt(val_split)],
-    ["Gold Test Set", len(test_split),  get_cnt(test_split)]
-]
-# 3. Print table
-print(tabulate(table_data, headers=["Subset", "Samples", "Mentions"], tablefmt="grid"))
-
-
-# %% [markdown]
-# ## Convergence Analysis & Loss Visualization
-
-# %%
-# Training history visualization
-
-# 2. Setup the plot
-plot_training_history(results)
+    logger.info(f"Training completed!")
+    logger.info(f"Experiment name: {experiment_name}")
+    logger.info(f"Total steps: {results['total_steps']}")
+    logger.info(f"Total epochs: {total_epochs}")
+    logger.info(f"Training time: {results['total_time_seconds']/60:.1f} minutes")
+    logger.info(f"Best Epoch: {best_epoch + 1}/{total_epochs}") # +1 for 1-based indexing
+    logger.info(f"Best PRF: Precision: {best_p:.4f}, Recall: {best_r:.4f}, F1: {best_f1:.4f}")
+    
+    table_data = [
+        ["Train Split",   len(train_split), get_cnt(train_split)],
+        ["Val Split",     len(val_split),   get_cnt(val_split)],
+        ["Gold Test Set", len(test_split),  get_cnt(test_split)]
+    ]
+    print(tabulate(table_data, headers=["Subset", "Samples", "Mentions"], tablefmt="grid"))
+    plot_training_history(results)
 
 
 # %% [markdown]
 # ## Model Validation & Checkpoint Selection (Dev Set)
 
 # %%
-
-# 1. Load the original base model (pristine weights)
-best_model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-# 2. Add the LoRA
-adapter_path = DATA_DIR / "models" / experiment_name / "best"
-best_model.load_adapter(adapter_path)
-# 3. Ready for inference
-logger.info("Adapter loaded.")
+if not (args.bootstrap_only or args.eval_only):
+    # 1. Load the original base model (pristine weights)
+    best_model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+    # 2. Add the LoRA
+    adapter_path = DATA_DIR / "models" / experiment_name / "best"
+    best_model.load_adapter(adapter_path)
+    if torch.cuda.is_available():
+        best_model.to("cuda")
+        logger.info(f"Loaded model onto GPU device: {torch.cuda.get_device_name(0)}")
+    else:
+        logger.info("CUDA unavailable. Running inference on CPU.")
+    logger.info("Adapter loaded.")
 
 # %% [markdown]
 # ## Inference Threshold Calibration
 # We determine the optimal confidence threshold using the Validation Set to maximize the F1-score.
 
 # %%
-# 1. Prepare data once
-val_data_formatted = [
-    (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
-    for ex in val_split
-]
+if not (args.bootstrap_only or args.eval_only):
+    # 1. Prepare data once
+    val_data_formatted = [
+        (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
+        for ex in val_split
+    ]
 
-# 2. Iterate through thresholds to find the best F1
-thresholds = [0.4, 0.5, 0.6, 0.7, 0.8]
-p_scores = []
-r_scores = []
-f1_scores = []
+    # 2. Iterate through thresholds to find the best F1
+    thresholds = [0.4, 0.5, 0.6, 0.7, 0.8]
+    p_scores = []
+    r_scores = []
+    f1_scores = []
 
-best_threshold = 0.5
-best_val_f1 = 0
+    best_threshold = 0.5
+    best_val_f1 = 0
 
-logger.info(f"Finding optimal threshold on validation set ({len(val_split)} samples)...")
+    logger.info(f"Finding optimal threshold on validation set ({len(val_split)} samples)...")
 
-for t in thresholds:
-    logger.info(f"Evaluating threshold: {t}...")
-    res = compute_metrics(best_model, val_data_formatted, threshold=t)
-    p_scores.append(res['precision'])
-    r_scores.append(res['recall'])
-    f1_scores.append(res['f1'])
-    
-    if res['f1'] > best_val_f1:
-        best_val_f1 = res['f1']
-        best_threshold = t
+    for t in thresholds:
+        logger.info(f"Evaluating threshold: {t}...")
+        res = compute_metrics(best_model, val_data_formatted, threshold=t)
+        p_scores.append(res['precision'])
+        r_scores.append(res['recall'])
+        f1_scores.append(res['f1'])
+        
+        if res['f1'] > best_val_f1:
+            best_val_f1 = res['f1']
+            best_threshold = t
 
-logger.info(f">>> Optimal Threshold Found: {best_threshold} (Val F1: {best_val_f1:.4f})")
+    logger.info(f">>> Optimal Threshold Found: {best_threshold} (Val F1: {best_val_f1:.4f})")
 
-# 3. Visualization of the search space
-plot_threshold_curves(thresholds, p_scores, r_scores, f1_scores, best_threshold)
+    # 3. Visualization of the search space
+    plot_threshold_curves(thresholds, p_scores, r_scores, f1_scores, best_threshold)
 
-# %% [markdown]
-# ## Zero-Shot Performance Baseline
-# Comparative evaluation of the base model's zero-shot capabilities prior to domain adaptation.
+    # %% [markdown]
+    # ## Zero-Shot Performance Baseline
+    # Comparative evaluation of the base model's zero-shot capabilities prior to domain adaptation.
 
-# %%
-logger.info("Evaluating Zero-Shot Baseline...")
-# Load fresh base model without adapters
-zero_shot_model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
-zero_shot_model.to(best_model.device)
+    # %%
+    logger.info("Evaluating Zero-Shot Baseline...")
+    # Load fresh base model without adapters
+    zero_shot_model = GLiNER2.from_pretrained("fastino/gliner2-multi-v1")
+    zero_shot_model.to(best_model.device)
 
-# Prepare test data
-test_data_formatted = [
-    (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
-    for ex in test_split
-]
+    # Prepare test data
+    test_data_formatted = [
+        (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
+        for ex in test_split
+    ]
 
-# Evaluate at a standard threshold (0.5)
-zs_results = compute_metrics(zero_shot_model, test_data_formatted, threshold=0.5)
+    # Evaluate at a standard threshold (0.5)
+    zs_results = compute_metrics(zero_shot_model, test_data_formatted, threshold=0.5)
 
-logger.info("\n" + "="*40)
-logger.info("ZERO-SHOT BASELINE RESULTS")
-logger.info(f"F1 Score : {zs_results['f1']:.4f}")
-logger.info(f"Precision: {zs_results['precision']:.4f}")
-logger.info(f"Recall   : {zs_results['recall']:.4f}")
-logger.info("="*40)
+    logger.info("\n" + "="*40)
+    logger.info("ZERO-SHOT BASELINE RESULTS")
+    logger.info(f"F1 Score : {zs_results['f1']:.4f}")
+    logger.info(f"Precision: {zs_results['precision']:.4f}")
+    logger.info(f"Recall   : {zs_results['recall']:.4f}")
+    logger.info("="*40)
 
-# Log to WandB
-log_to_wandb(zs_results, prefix="zero_shot_")
+    # Log to WandB
+    log_to_wandb(zs_results, prefix="zero_shot_")
+else:
+    best_threshold = 0.8
+    test_data_formatted = [
+        (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
+        for ex in test_split
+    ]
 
 # %% [markdown]
 # ## Final Benchmarking on Isolated Gold Test Set
@@ -504,36 +535,32 @@ log_to_wandb(zs_results, prefix="zero_shot_")
 # %%
 # Use the isolated test set created during the grouped split
 test_dataset = test_split
-test_data_formatted = [
-    (ex.text, {"entities": ex.entities, "entity_descriptions": ex.entity_descriptions}) 
-    for ex in test_dataset
-]
 
-logger.info(f"Started evaluating model on GOLD TEST SET using optimal threshold: {best_threshold}")
-final_results = evaluate_adapter(best_model, adapter_path, test_dataset, threshold=best_threshold)
-logger.info(f"Done evaluating model.")
+if args.bootstrap_only:
+    logger.info(f"Running BOOTSTRAP ONLY evaluation on GOLD TEST SET (threshold={best_threshold})...")
+    compute_bootstrap_metrics(best_model, test_data_formatted, threshold=best_threshold, n_bootstraps=1000)
+elif args.eval_only:
+    logger.info(f"Running EVAL ONLY evaluation on GOLD TEST SET (threshold={best_threshold})...")
+    show_detailed_report(best_model, test_data_formatted, threshold=best_threshold)
+else:
+    logger.info(f"Started evaluating model on GOLD TEST SET using optimal threshold: {best_threshold}")
+    final_results = evaluate_adapter(best_model, adapter_path, test_dataset, threshold=best_threshold)
+    logger.info(f"Done evaluating model.")
 
-# Log final benchmark to WandB
-log_to_wandb(final_results, prefix="gold_test_")
+    # Bootstrap 95% Confidence Intervals
+    bootstrap_results = compute_bootstrap_metrics(best_model, test_data_formatted, threshold=best_threshold, n_bootstraps=1000)
 
-# Upload Best Adapter as Artifact
-upload_wandb_artifact(wandb_enabled, adapter_path, experiment_name)
+    # Log final benchmark to WandB
+    log_to_wandb(final_results, prefix="gold_test_")
 
-if wandb_enabled:
-    wandb.finish()
-# %% [markdown]
-# ## Granular Performance Metrics by Entity Class
-# Precision, Recall, and F1-score disaggregated by archaeological entity types.
+    # Upload Best Adapter as Artifact
+    upload_wandb_artifact(wandb_enabled, adapter_path, experiment_name)
 
-# %%
-show_detailed_report(best_model, test_data_formatted, threshold=best_threshold)
+    if wandb_enabled:
+        wandb.finish()
 
-# %% [markdown]
-# ## Categorical Confusion Analysis
-
-# %%
-# Plot confusion matrix using the optimized threshold
-plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold)
+    show_detailed_report(best_model, test_data_formatted, threshold=best_threshold)
+    plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold)
 
 
 
