@@ -12,7 +12,7 @@ Overall, this work aims to create the first specialised resource for the applica
 
 ## Dataset
 
-The dataset is currently anonymized for peer review. It consists of 1,464 manually annotated Greek archaeological sentences, which are distributed across the following splits:
+The dataset is currently anonymized for peer review. The raw annotated data is provided in `data/archaeo_ner_greek.xlsx`. It consists of 1,464 manually annotated Greek archaeological sentences, which are distributed across the following splits:
 - **Train**: 1,180 sentences
 - **Validation**: 151 sentences
 - **Test**: 133 sentences
