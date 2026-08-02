@@ -43,8 +43,10 @@ LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # %%
 load_dotenv(find_dotenv(), override=True)
-repo_id = os.getenv("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
+repo_id = os.getenv("HF_REPO_ID")
 hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+if not repo_id:
+    raise ValueError("HF_REPO_ID is not set in the .env file.")
 
 ds = load_dataset(repo_id, name="default", token=hf_token, revision="dev")
 

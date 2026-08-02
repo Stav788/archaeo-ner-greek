@@ -82,7 +82,7 @@ NUM_BATCHES = int(get_secret("SYNTHETIC_NUM_BATCHES", "3"))
 NUM_SAMPLES_PER_BATCH = int(get_secret("SYNTHETIC_SAMPLES_PER_BATCH", "5"))
 SEED = int(get_secret("SYNTHETIC_SEED", "42"))
 FLATTEN_SPANS = get_secret("SYNTHETIC_FLATTEN_SPANS", "True").lower() in ("true", "1", "yes")
-HF_REPO_ID_DEFAULT = get_secret("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
+HF_REPO_ID_DEFAULT = get_secret("HF_REPO_ID") or "your-username/archaeo-ner-greek"
 
 # Set seed for reproducible sampling
 random.seed(SEED)

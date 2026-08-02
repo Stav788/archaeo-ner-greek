@@ -76,11 +76,14 @@ def prepare_gliner2_format(df, all_possible_labels, files_content=None):
 def main():
     logger.info("Initializing synthetic publication script...")
     env_vars = setup_local()
-    
-    repo_id = env_vars.get("HF_REPO_ID", "Stalexan/archaeo-ner-greek")
+
+    repo_id = env_vars.get("HF_REPO_ID") or "your-username/archaeo-ner-greek"
     hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
     hf_private = env_vars.get("HF_REPO_PRIVATE", "False").lower() == "true"
-    
+
+    if not repo_id:
+        logger.error("HF_REPO_ID is missing in the environment.")
+        sys.exit(1)
     if not hf_token:
         logger.error("HF_TOKEN is missing in the environment.")
         sys.exit(1)
