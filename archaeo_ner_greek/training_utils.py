@@ -44,9 +44,10 @@ def setup_colab():
     # 1. Install uv
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
 
-    GITHUB_TOKEN = userdata.get('GITHUB_TOKEN')
+    GITHUB_TOKEN = userdata.get('GITHUB_TOKEN') if userdata else os.getenv('GITHUB_TOKEN')
+    GITHUB_USERNAME = os.getenv('GITHUB_USERNAME', 'your-username')
     REPO_NAME = "archaeo-ner-greek"
-    REPO_URL = f"https://{GITHUB_TOKEN}@github.com/Stav788/{REPO_NAME}.git"
+    REPO_URL = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USERNAME}/{REPO_NAME}.git"
     
     if not os.path.exists(REPO_NAME):
         try:
