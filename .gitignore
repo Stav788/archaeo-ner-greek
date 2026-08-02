@@ -160,6 +160,7 @@ fabric.properties
 *~
 
 data/*
+!data/archaeo_ner_greek.xlsx
 data/synthetic_data_generation/
 data/synthetic_data_generation/synthetic_archaeology_real_seeded_gemini25flash_n1350.json
 data/extra_texts/
