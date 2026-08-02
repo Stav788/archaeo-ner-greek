@@ -73,7 +73,8 @@ if IN_COLAB:
             print("GITHUB_TOKEN is MISSING in Colab Secrets.")
 
         if not os.path.exists(REPO_NAME):
-            REPO_URL = f"https://{GITHUB_TOKEN}@github.com/Stav788/{REPO_NAME}.git"
+            GITHUB_USERNAME = os.getenv('GITHUB_USERNAME', 'your-username')
+            REPO_URL = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_USERNAME}/{REPO_NAME}.git"
             try:
                 # Capture stderr to see the actual reason for failure
                 result = subprocess.run(["git", "clone", "--branch", "dev", REPO_URL], 
