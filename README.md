@@ -13,6 +13,7 @@ Overall, this work aims to create the first specialised resource for the applica
 ## Dataset
 
 The dataset is currently anonymized for peer review. The raw annotated data is provided in `data/archaeo_ner_greek.xlsx`. Upon acceptance, the dataset will be officially released via the Hugging Face Dataset Hub (the link is currently omitted to preserve double-blind anonymity). It consists of 1,464 manually annotated Greek archaeological sentences, which are distributed across the following splits:
+
 - **Train**: 1,180 sentences
 - **Validation**: 151 sentences
 - **Test**: 133 sentences
@@ -23,14 +24,16 @@ This repository provides scripts to evaluate the dataset using both the GLiNER2 
 
 ### 1. GLiNER2 Evaluation
 
-To train the model from scratch, or evaluate it on the test set, run the GLiNER2 training script. 
+To train the model from scratch, or evaluate it on the test set, run the GLiNER2 training script.
 
 To run a full training pipeline:
+
 ```bash
 uv run python notebooks/gliner2_training.py
 ```
 
 To evaluate an already fine-tuned adapter without retraining:
+
 ```bash
 uv run python notebooks/gliner2_training.py --eval-only --adapter-path path/to/your/saved_adapter
 ```
@@ -40,12 +43,16 @@ uv run python notebooks/gliner2_training.py --eval-only --adapter-path path/to/y
 To evaluate the test dataset using various LLMs (0-shot and 5-shot), run the LLM evaluation script. The script relies on API providers (like OpenRouter) for large models and local inference for smaller domain models.
 
 To run the evaluation across all models on the full dataset:
+
 ```bash
 uv run python notebooks/llm_ner_evaluation.py --model all
 ```
 
 You can also restrict the evaluation to a specific model or a subset of samples (useful for quick testing). For example:
+
 ```bash
 # Example: Evaluate only 10 samples using a specific model (e.g., Llama 3)
 uv run python notebooks/llm_ner_evaluation.py --model llama --samples 10
 ```
+
+*Note: The evaluation script is pre-configured with the specific model endpoints. Passing short names like `llama`, `gemma`, `qwen`, or `krikri` automatically resolves to the exact model versions used in the paper (e.g., `meta-llama/llama-3.1-8b-instruct`).*
