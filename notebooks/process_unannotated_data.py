@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 # %%
 # --- HF Dataset Config ---
-HF_REPO_ID = "Stalexan/archaeo-ner-greek"
+HF_REPO_ID = os.getenv("HF_REPO_ID") or "your-username/archaeo-ner-greek"
 HF_SUBSET = "raw_texts"
 HF_SPLIT = "train"
 USED_FOR_FILTER = "synthetic"
@@ -123,8 +123,10 @@ except Exception as e:
     logger.critical(f"❌ Argilla connectivity/permission check failed: {e}")
     raise e
 
-repo_id = env_vars.get("HF_REPO_ID", HF_REPO_ID)
+repo_id = env_vars.get("HF_REPO_ID") or HF_REPO_ID
 hf_token = env_vars.get("HF_TOKEN") or env_vars.get("HUGGING_FACE_HUB_TOKEN")
+if not repo_id:
+    raise ValueError("HF_REPO_ID is missing from the .env file.")
 
 # 1. Load HF dataset
 logger.info(f"Loading {HF_SUBSET} from HF dataset: {repo_id}")
