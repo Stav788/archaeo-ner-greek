@@ -1,114 +1,58 @@
 # Archaeo-NER-Greek
 
-Welcome! This project is dedicated to **Named Entity Recognition (NER)** for Greek archaeological texts. It provides tools for data preparation, annotation management via Argilla, and Inter-Annotator Agreement (IAA) analysis.
+Archaeology today is confronted with a rapidly increasing volume of data, a large part of which takes the form of textual material. In the case of Greece, which has one of the densest archaeological landscapes worldwide, the volume of excavation reports, catalogues, and scholarly publications is particularly extensive. The systematic management and analysis of this information is becoming increasingly difficult using exclusively traditional methods. A promising approach for extracting structured information from archaeological texts is Named Entity Recognition (NER).
 
----
+This work presents the development of a dataset specifically designed for Greek archaeology. A corpus consisting of 1,464 sentences was manually annotated according to a schema that includes eight entity types: Artefact, Context, Feature, Location, Material, Period, Person, and Species. To ensure quality, a subset of 324 sentences was independently annotated by two annotators, achieving an Inter-Annotator Agreement (IAA) $F_1$-score of 0.91 after the revision of the annotation guidelines, indicating high consistency in the annotation process.
 
-## Part 1: Setting Up Your Environment
+The dataset was used to evaluate both fine-tuned small language models and state-of-the-art Large Language Models (LLMs) on the task of recognising archaeological entities in Greek texts. First, the GLiNER2 model (`fastino/gliner2-multi-v1`) was adapted via supervised fine-tuning, achieving a final micro-$F_1$ score of 0.77 on the human-annotated test set.
 
-Before you can run any scripts, you need to install four essential tools.
+Additionally, the dataset served as a benchmark for evaluating modern instruction-tuned LLMs in zero-shot and few-shot settings. The results highlighted the challenges posed by specialised archaeological terminology, multi-word entities, linguistic ambiguity, and the syntactic complexity of Greek archaeological texts. In particular, the LLM evaluation demonstrated complex in-context learning dynamics, where smaller models benefited from few-shot demonstrations while massive models exhibited in-context demonstration bias.
 
-### 1. VS Code or Antigravity (The Editor)
-You can use **VS Code** as your primary editor, or leverage **Antigravity**, a powerful AI coding assistant that helps you navigate the codebase, run scripts, and manage your data workflows through natural language commands.
+Overall, this work aims to create the first specialised resource for the application of NER to Greek archaeology and to provide a basis for future research on the extraction and organisation of archaeological information from Greek texts.
 
-#### Connecting your Google Account
-To access professional features and specialized AI models:
-- **In Antigravity**: Click on the user profile icon (usually in the top right or bottom left corner depending on your interface) and select **"Sign in with Google"**. Ensure you use the account associated with your Pro subscription.
-- **In VS Code**: If you are using the official Google extensions, look for the account icon in the Activity Bar (left side). Click it and select **"Sign in to sync settings"** or **"Sign in with Google"** to link your environment with your account.
+## Dataset
 
-### 2. Python (The Engine)
-- This project requires **Python 3.12** or higher.
-- **Linux**: Usually comes pre-installed. Verify with `python3 --version`.
-- **Windows**: Download from [python.org](https://www.python.org/downloads/). **CRITICAL**: Check **"Add Python to PATH"** during installation.
+The dataset is currently anonymized for peer review. The raw annotated data is provided in [`data/archaeo_ner_greek.xlsx`](data/archaeo_ner_greek.xlsx). Upon acceptance, the dataset will be officially released via the Hugging Face Dataset Hub (the link is currently omitted to preserve double-blind anonymity). It consists of 1,464 manually annotated Greek archaeological sentences, which are distributed across the following splits:
 
-### 3. Git
-- **Windows**: Download "Git for Windows" from [git-scm.com](https://git-scm.com/).
-- **Linux**: Install via your terminal (e.g., `sudo apt install git`).
+- **Train**: 1,180 sentences
+- **Validation**: 151 sentences
+- **Test**: 133 sentences
 
-### 4. uv (The Manager)
-`uv` is a modern tool that automatically manages your virtual environment and dependencies.
-- **Windows (PowerShell)**:
-  ```powershell
-  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-- **Linux/macOS**:
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
+## Evaluation
 
----
+This repository provides scripts to evaluate the dataset using both the GLiNER2 fine-tuned approach and large language model (LLM) baselines. All scripts are executed in an isolated environment via `uv`.
 
-## Part 2: Getting the Code
+### 1. GLiNER2 Evaluation
 
-1. Open a terminal and navigate to your projects folder.
-2. Clone the repository:
-   ```bash
-   git clone https://github.com/prokopidis/archaeo-ner-greek.git
-   cd archaeo-ner-greek
-   ```
-3. Initialize the environment:
-   ```bash
-   uv sync
-   ```
+To train the model from scratch, or evaluate it on the test set, run the GLiNER2 training script.
 
----
+To run a full training pipeline:
 
-## Part 3: Configuration (.env file)
+```bash
+uv run python notebooks/gliner2_training.py
+```
 
-The project uses [Argilla](https://argilla.io/) for data annotation. You need to provide your Argilla credentials in a `.env` file.
+To evaluate an already fine-tuned adapter without retraining:
 
-1. In the project root, create a file named `.env`.
-2. Copy the content from `.env.example` and fill in your details:
-   ```env
-   ARGILLA_API_URL=https://your-argilla-instance.com
-   ARGILLA_API_KEY=your-api-key
-   ```
+```bash
+uv run python notebooks/gliner2_training.py --eval-only --adapter-path path/to/your/saved_adapter
+```
 
----
+### 2. LLM-based Evaluation
 
-## Part 4: Project Structure
+To evaluate the test dataset using various LLMs (0-shot and 5-shot), run the LLM evaluation script. The script relies on API providers (like OpenRouter) for large models and local inference for smaller domain models.
 
-- `archaeo_ner_greek/`: Core Python package containing utilities for Argilla integration, logging, and data processing.
-- `notebooks/`: Jupyter notebooks for various tasks:
-  - `iaa_from_argilla_data.ipynb`: Calculate Inter-Annotator Agreement.
-- `data/`: Contains sample texts and annotation guidelines.
-- `models/`: Directory for storing trained NER models.
+To run the evaluation across all models on the full dataset:
 
----
+```bash
+uv run python notebooks/llm_ner_evaluation.py --model all
+```
 
-## Part 5: Usage
+You can also restrict the evaluation to a specific model or a subset of samples (useful for quick testing). For example:
 
-Most tasks are currently performed via Jupyter notebooks. To start working:
+```bash
+# Example: Evaluate only 10 samples using a specific model (e.g., Llama 3)
+uv run python notebooks/llm_ner_evaluation.py --model llama --samples 10
+```
 
-1. Activate the environment:
-   ```bash
-   source .venv/bin/activate  # On Linux/macOS
-   .venv\Scripts\activate     # On Windows
-   ```
-2. Use **VS Code** or **Antigravity** to work with the project.
-
-### Working with Jupyter Notebooks
-
-Jupyter notebooks (files ending in `.ipynb`) allow you to run code in "blocks" or "cells". You can use `notebooks/iaa_from_argilla_data.ipynb` as a starting point.
-
-#### 1. Loading the Kernel
-The "Kernel" is the engine that runs your code. 
-- When you open a notebook, look at the top right corner.
-- If it says **"Select Kernel"**, click it and choose the Python environment created by `uv` (usually labeled as `.venv` or `Python 3.12.x`).
-
-#### 2. Running Code Blocks
-- **Run a single cell**: Click the **Play icon** (▶) next to the cell, or press `Shift + Enter`.
-- **Run all cells**: Click **"Run All"** in the top toolbar to execute the entire notebook from start to finish.
-
-#### 3. Common Shortcuts
-- `Shift + Enter`: Run the current cell and move to the next.
-- `Ctrl + Enter`: Run the current cell and stay on it.
-
-
-#### 4. Managing the Kernel
-If the code gets stuck or you want to start fresh:
-- **Interrupt** (⏹): Stops the code that is currently running.
-- **Restart**: Clears all memory and variables. You will need to run the cells again from the top.
-- **Clear All Outputs**: Removes the results shown below the cells to make the notebook cleaner. This does not delete your code.
-
----
+*Note: The evaluation script is pre-configured with the specific model endpoints. Passing short names like `llama`, `gemma`, `qwen`, or `krikri` automatically resolves to the exact model versions used in the paper (e.g., `meta-llama/llama-3.1-8b-instruct`).*
