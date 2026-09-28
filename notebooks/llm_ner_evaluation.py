@@ -579,6 +579,14 @@ def evaluate_model(model_name, model_id, predict_fn, test_df, few_shot_examples,
     qualitative_path = output_dir / f"{model_name}_qualitative.tsv"
     generate_qualitative_report(test_df, predictions, LABELS, qualitative_path)
 
+    from archaeo_ner_greek.training_utils import export_llm_eval_artifacts
+    test_data_formatted = [
+        (_extract_row_text(row), {"entities": _extract_row_entities(row)})
+        for _, row in test_df.iterrows()
+    ]
+    cm_path = export_llm_eval_artifacts(predictions, test_data_formatted, ENTITY_DESCRIPTIONS, output_dir, model_name)
+    LOGGER.info("Exported confusion matrix to %s", cm_path)
+
     return result_payload
 
 

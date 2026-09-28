@@ -143,6 +143,7 @@ parser = argparse.ArgumentParser(description="GLiNER2 Training & Evaluation Pipe
 parser.add_argument("--bootstrap-only", action="store_true", help="Skip training and run bootstrap CI evaluation on the gold test set.")
 parser.add_argument("--eval-only", action="store_true", help="Skip training and evaluate the saved best model adapter.")
 parser.add_argument("--adapter-path", type=str, default=None, help="Path to adapter checkpoint (used with --bootstrap-only or --eval-only).")
+parser.add_argument("--output-dir", type=str, default=str(Path("logs/gliner2_eval_artifacts").absolute()), help="Directory to save evaluation artifacts.")
 parser.add_argument("--no-wandb", action="store_true", help="Explicitly disable WandB logging.")
 args, _ = parser.parse_known_args()
 
@@ -496,9 +497,9 @@ if not (args.bootstrap_only or args.eval_only):
     # 3. Visualization of the search space
     plot_threshold_curves(thresholds, p_scores, r_scores, f1_scores, best_threshold)
 
-    # %% [markdown]
-    # ## Zero-Shot Performance Baseline
-    # Comparative evaluation of the base model's zero-shot capabilities prior to domain adaptation.
+# %% [markdown]
+#     # ## Zero-Shot Performance Baseline
+#     # Comparative evaluation of the base model's zero-shot capabilities prior to domain adaptation.
 
     # %%
     logger.info("Evaluating Zero-Shot Baseline...")
@@ -545,6 +546,13 @@ if args.bootstrap_only:
 elif args.eval_only:
     logger.info(f"Running EVAL ONLY evaluation on GOLD TEST SET (threshold={best_threshold})...")
     show_detailed_report(best_model, test_data_formatted, threshold=best_threshold)
+    
+    from archaeo_ner_greek.training_utils import get_model_predictions, export_gliner2_eval_artifacts
+    logger.info("Extracting predictions and saving evaluation artifacts...")
+    predictions = get_model_predictions(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold)
+    export_dir = Path(args.output_dir)
+    export_gliner2_eval_artifacts(predictions, test_data_formatted, entity_descriptions, output_dir=str(export_dir))
+    logger.info(f"Artifacts exported to {export_dir}")
 else:
     logger.info(f"Started evaluating model on GOLD TEST SET using optimal threshold: {best_threshold}")
     final_results = evaluate_adapter(best_model, adapter_path, test_dataset, threshold=best_threshold)
@@ -563,8 +571,13 @@ else:
         wandb.finish()
 
     show_detailed_report(best_model, test_data_formatted, threshold=best_threshold)
-    plot_ner_confusion_matrix(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold)
-
+    
+    from archaeo_ner_greek.training_utils import get_model_predictions, export_gliner2_eval_artifacts
+    logger.info("Extracting predictions and saving evaluation artifacts...")
+    predictions = get_model_predictions(best_model, test_data_formatted, entity_descriptions, threshold=best_threshold)
+    export_dir = Path(args.output_dir)
+    export_gliner2_eval_artifacts(predictions, test_data_formatted, entity_descriptions, output_dir=str(export_dir))
+    logger.info(f"Artifacts exported to {export_dir}")
 
 
 # %% [markdown]

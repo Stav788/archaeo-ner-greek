@@ -461,12 +461,21 @@ def find_best_split_seeds(df, group_col, num_trials=100, top_n=5):
     results.sort(key=lambda x: (x["total_missing"], x["error"]))
     return results[:top_n]
 
-def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8):
+def get_model_predictions(model, dataset, entity_descriptions, threshold=0.5):
+    """Runs inference on dataset and returns a list of prediction dictionaries."""
+    predictions = []
+    for ex in dataset:
+        text = ex[0]
+        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
+        predictions.append(output.get('entities', {}))
+    return predictions
+
+def plot_ner_confusion_matrix(predictions_list, dataset, entity_descriptions, output_path=None, model_name="GLiNER2"):
     """
     Plots a confusion matrix for NER results, including an 'O' category 
     for False Positives and False Negatives.
     """
-    from sklearn.metrics import confusion_matrix
+    from sklearn.metrics import confusion_matrix, f1_score
     import seaborn as sns
     import matplotlib.pyplot as plt
     
@@ -475,7 +484,7 @@ def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8
     labels = list(entity_descriptions.keys())
     
     # 1. Collect all spans
-    for ex in dataset:
+    for ex, pred_entities in zip(dataset, predictions_list):
         text, gt_entities = ex[0], ex[1]["entities"]
         
         # Ground Truth spans
@@ -484,8 +493,6 @@ def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8
             for t in texts: gt_spans.append((t, lbl))
             
         # Prediction spans
-        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
-        pred_entities = output.get('entities', {})
         pred_spans = []
         for lbl, texts in pred_entities.items():
             for t in texts: pred_spans.append((t, lbl))
@@ -512,12 +519,17 @@ def plot_ner_confusion_matrix(model, dataset, entity_descriptions, threshold=0.8
     all_labels = labels + ["O"]
     cm = confusion_matrix(y_true, y_pred, labels=all_labels)
     
+    # Calculate F1 score excluding 'O'
+    f1 = f1_score(y_true, y_pred, labels=labels, average='micro')
+    
     # 4. Plot
     plt.figure(figsize=(12, 10))
     sns.heatmap(cm, annot=True, fmt='d', xticklabels=all_labels, yticklabels=all_labels, cmap='Blues')
-    plt.title(f"NER Confusion Matrix (Threshold: {threshold})")
-    plt.ylabel('Actual Label')
-    plt.xlabel('Predicted Label')
+    plt.title(f"Confusion Matrix ({model_name}) | Micro-F1: {f1:.4f}")
+    plt.ylabel('Actual')
+    plt.xlabel('Predicted')
+    if output_path:
+        plt.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.show()
 
 def compute_metrics(model, dataset, threshold=0.8):
@@ -707,16 +719,18 @@ def evaluate_adapter(model, adapter_path, test_data, threshold=0.8):
     
     return results
 
-def show_error_analysis(model, dataset, entity_descriptions, threshold=0.8, num_examples=5):
+def show_error_analysis(predictions_list, dataset, num_examples=5, output_path=None):
     """Provides qualitative error analysis by highlighting TPs, FPs, and FNs in the console."""
-    print(f"--- QUALITATIVE ERROR ANALYSIS (Threshold: {threshold}) ---\n")
+    import csv
+    print(f"--- QUALITATIVE ERROR ANALYSIS ---\n")
+    
+    tsv_data = []
     
     for i, ex in enumerate(dataset[:num_examples]):
         text, gt_entities = ex[0], ex[1]["entities"]
         
         # Get Predictions
-        output = model.extract_entities(text, entity_descriptions, threshold=threshold)
-        pred_entities = output.get('entities', {})
+        pred_entities = predictions_list[i]
         
         # Flatten for comparison
         gt_spans = [(t, lbl) for lbl, texts in gt_entities.items() for t in texts]
@@ -735,6 +749,22 @@ def show_error_analysis(model, dataset, entity_descriptions, threshold=0.8, num_
         if fp: print(f"  \033[91m[FPs]: {fp}\033[0m") # Red
         if fn: print(f"  \033[93m[FNs]: {fn}\033[0m") # Yellow
         print("-" * 50)
+        
+        if output_path:
+            tsv_data.append({
+                "sample_index": i,
+                "text": text,
+                "true_positives": "; ".join([f"{t}({l})" for t, l in tp]),
+                "false_positives": "; ".join([f"{t}({l})" for t, l in fp]),
+                "false_negatives": "; ".join([f"{t}({l})" for t, l in fn])
+            })
+            
+    if output_path and tsv_data:
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=["sample_index", "text", "true_positives", "false_positives", "false_negatives"], delimiter='\t')
+            writer.writeheader()
+            writer.writerows(tsv_data)
+        print(f"Qualitative analysis saved to {output_path}")
 
 def show_detailed_report(model, dataset, threshold=0.5):
     """
@@ -854,3 +884,92 @@ def upload_wandb_artifact(enabled, adapter_path, experiment_name):
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"WandB artifact upload failed: {e}")
+
+def plot_llm_confusion_matrix(predictions_list, dataset, entity_descriptions, output_path=None, model_name="LLM"):
+    """
+    Plots a confusion matrix for LLM NER results, handling span matching directly.
+    """
+    from sklearn.metrics import confusion_matrix, f1_score
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    
+    y_true = []
+    y_pred = []
+    labels = list(entity_descriptions.keys())
+    
+    for ex, pred_entities in zip(dataset, predictions_list):
+        # Extract ground truth
+        gt_entities = ex[1]["entities"] if isinstance(ex, tuple) else ex["entities"]
+        
+        gt_spans = []
+        for lbl, texts in gt_entities.items():
+            for t in texts: gt_spans.append((t, lbl))
+            
+        pred_spans = []
+        for lbl, texts in pred_entities.items():
+            for t in texts: pred_spans.append((t, lbl))
+            
+        temp_pred = pred_spans.copy()
+        for t_gt, lbl_gt in gt_spans:
+            match = next((p for p in temp_pred if p[0] == t_gt), None)
+            if match:
+                y_true.append(lbl_gt)
+                y_pred.append(match[1])
+                temp_pred.remove(match)
+            else:
+                y_true.append(lbl_gt)
+                y_pred.append("O")
+                
+        for t_p, lbl_p in temp_pred:
+            y_true.append("O")
+            y_pred.append(lbl_p)
+
+    all_labels = labels + ["O"]
+    cm = confusion_matrix(y_true, y_pred, labels=all_labels)
+    f1 = f1_score(y_true, y_pred, labels=labels, average='micro')
+    
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', xticklabels=all_labels, yticklabels=all_labels, cmap='Blues')
+    plt.title(f"Confusion Matrix ({model_name}) | Micro-F1: {f1:.4f}")
+    plt.ylabel('Actual')
+    plt.xlabel('Predicted')
+    
+    if output_path:
+        plt.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
+
+def export_gliner2_eval_artifacts(predictions_list, dataset, entity_descriptions, output_dir, model_name="GLiNER2"):
+    """
+    Exports gliner2 predictions, qualitative TSV, and confusion matrix PNG to output_dir.
+    """
+    import json
+    from pathlib import Path
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    predictions_path = output_dir / "gliner2_predictions.json"
+    with open(predictions_path, "w", encoding="utf-8") as f:
+        json.dump(predictions_list, f, ensure_ascii=False, indent=2)
+        
+    qualitative_path = output_dir / "gliner2_qualitative_errors.tsv"
+    show_error_analysis(predictions_list, dataset, num_examples=len(dataset), output_path=str(qualitative_path))
+    
+    cm_path = output_dir / "gliner2_confusion_matrix.png"
+    plot_ner_confusion_matrix(predictions_list, dataset, entity_descriptions, output_path=str(cm_path), model_name=model_name)
+    
+    return output_dir
+
+
+def export_llm_eval_artifacts(predictions_list, dataset, entity_descriptions, output_dir, model_name="LLM"):
+    """
+    Exports LLM confusion matrix PNG to output_dir.
+    """
+    from pathlib import Path
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    cm_path = output_dir / f"cm_{model_name}.png"
+    plot_llm_confusion_matrix(predictions_list, dataset, entity_descriptions, output_path=str(cm_path), model_name=model_name)
+    
+    return cm_path

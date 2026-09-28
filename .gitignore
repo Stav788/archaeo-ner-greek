@@ -186,3 +186,5 @@ scratch/
 .agents/
 notebooks/*.svg
 notebooks/*.png
+paper/
+overleaf/
