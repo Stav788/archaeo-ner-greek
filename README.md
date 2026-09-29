@@ -56,3 +56,12 @@ uv run python notebooks/llm_ner_evaluation.py --model llama --samples 10
 ```
 
 *Note: The evaluation script is pre-configured with the specific model endpoints. Passing short names like `llama`, `gemma`, `qwen`, or `krikri` automatically resolves to the exact model versions used in the paper (e.g., `meta-llama/llama-3.1-8b-instruct`).*
+
+## Language
+
+Modern Greek
+
+## License
+
+This dataset is released under the Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0) license.
+
