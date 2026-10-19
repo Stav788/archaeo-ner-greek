@@ -1,29 +1,15 @@
 # To-do list
 
-## Πρόσβαση στο Αθηνά
 
-- [ ] Να δημιουργηθεί VPN λογαριασμός στο Αθηνά. (In progress, prokopis)
-- [ ] Να εγκατασταθεί το **PuTTY**. Να δημιουργηθεί ζεύγος **public/private SSH key**. Να σταλεί το **public key** στον prokopis. (Stav788)
 
 ## Reviewer comments
 
-- [ ] Να συγκεντρωθούν και να ομαδοποιηθούν όλα τα σχόλια των κριτών. (Stav788)
+- [ ] Document the criteria for selecting the 99 documents and discuss their representativeness.
+- [ ] Add supervised baselines beyond GLiNER2 (e.g. GreekBERT, PL-Marker, fine-tuned small LLMs) and report results across multiple seeds.
+- [ ] Report partial-match, per-category, and macro-F1 results; evaluate different values of k in few-shot experiments; and phrase the LLM comparison more cautiously.
+- [ ] Clarify annotation provenance and strengthen the motivation for the FEATURE and PERSON categories, incorporating the explanations provided in the rebuttal.)
 
-## GitHub
 
-- [X] Να μετονομαστεί το υπάρχον **main** σε **thesis**. (prokopis)
-- [X] Να δημιουργηθεί νέο **main** για το paper **Archaeo-NER-Greek**. (prokopis)
-- [X] Το **main** να περιέχει μόνο την τελική εκδοχή του paper. (prokopis)
-- [ ] Το **dev** να χρησιμοποιείται για τα νέα πειράματα και τις πρόσθετες εργασίες του paper. (prokopis, Stav788)
-
-## Hugging Face
-
-- [ ] Να ελεγχθεί αν το dataset που βρίσκεται τώρα στο HF είναι η σωστή και πιο πρόσφατη έκδοση (Stav788) 
-- [ ] Το HF να είναι public και open, όχι gated (Stav788)
-- [X] Το σημερινό **dev** dataset να γίνει το main dataset στο HF.
-- [X] Το GitHub να παραπέμπει στο HF dataset.
-- [X] Το HF να παραπέμπει στο GitHub repository.
-- [X] Να μεταφερθεί το README του GitHub και στο HF.
 
 ## Sources
 
