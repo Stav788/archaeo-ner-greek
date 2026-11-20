@@ -9,7 +9,9 @@
 - [ ] Report partial-match, per-category, and macro-F1 results; evaluate different values of k in few-shot experiments; and phrase the LLM comparison more cautiously.
 - [ ] Clarify annotation provenance and strengthen the motivation for the FEATURE and PERSON categories, incorporating the explanations provided in the rebuttal.)
 
+## Our answer
 
+- [ ] In the revision, we will incorporate suggested improvements, focusing on broader baseline comparisons, partial-match evaluation, and expanded reporting on annotation quality
 
 ## Sources
 
