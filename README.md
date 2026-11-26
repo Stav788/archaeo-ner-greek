@@ -61,7 +61,5 @@ uv run python notebooks/llm_ner_evaluation.py --model llama --samples 10
 
 Modern Greek
 
-## License
 
-This dataset is released under the Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0) license.
 
